@@ -1830,17 +1830,17 @@ RELEASE_YEAR = \
   `sed -n '/.*COPYRIGHT_YEAR = \([0-9][0-9][0-9][0-9]\) };/s//\1/p' \
     $(top_srcdir)/lib/version-etc.c`
 
-installed_su = $(DESTDIR)$(bindir)/`echo su|sed '$(transform)'`
+installed_su = $(DESTDIR)$(bindir)/`echo su$(EXEEXT)|sed '$(transform)'`
 setuid_root_mode = a=rx,u+s
 install_su = \
   if test "$(INSTALL_SU)" = yes; then			\
-    p=su;						\
+    p=su$(EXEEXT);					\
     echo " $(INSTALL_PROGRAM) $$p $(installed_su)";	\
     $(INSTALL_PROGRAM) $$p $(installed_su);		\
     echo " chown root $(installed_su)";			\
     chown root $(installed_su);				\
     echo " chmod $(setuid_root_mode) $(installed_su)";	\
-    chmod $(setuid_root_mode) $(installed_su);		\
+    echo chmod $(setuid_root_mode) $(installed_su);	\
   else							\
     :;							\
   fi

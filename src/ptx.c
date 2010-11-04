@@ -559,6 +559,14 @@ swallow_file_in_memory (const char *file_name, BLOCK *block)
           else
 #endif /* not MSDOS */
 
+#ifdef __KLIBC__
+          /* Basically same as the MSDOS hack, only we use tell() to check. */
+          if (in_memory_size != (size_t)-1
+              && stat_block.st_size == tell (file_handle))
+            block->start = xrealloc (block->start, in_memory_size);
+          else
+#endif 
+
             error (EXIT_FAILURE, errno, "%s", file_name);
         }
       block->end = block->start + in_memory_size;

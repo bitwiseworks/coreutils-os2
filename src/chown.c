@@ -155,6 +155,10 @@ main (int argc, char **argv)
   uid_t uid = -1;	/* Specified uid; -1 if not to be changed. */
   gid_t gid = -1;	/* Specified gid; -1 if not to be changed. */
 
+#ifdef __KLIBC__
+  _wildcard (&argc, &argv);
+#endif
+
   /* Change the owner (group) of a file only if it has this uid (gid).
      -1 means there's no restriction.  */
   uid_t required_uid = -1;

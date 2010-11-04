@@ -61,7 +61,37 @@ static DIR *fd_clone_opendir (int);
 DIR *
 fdopendir (int fd)
 {
+#ifdef __KLIBC__
+  struct saved_cwd saved_cwd;
+  int saved_errno;
+  DIR *dir;
+
+  if (save_cwd (&saved_cwd) != 0)
+    openat_save_fail (errno);
+
+  if (fchdir (fd) != 0)
+    {
+      saved_errno = errno;
+      free_cwd (&saved_cwd);
+      errno = saved_errno;
+      return NULL;
+    }
+
+  dir = opendir (".");
+  saved_errno = errno;
+
+  if (restore_cwd (&saved_cwd) != 0)
+    openat_restore_fail (errno);
+
+  free_cwd (&saved_cwd);
+  if (dir)
+    close (fd);
+
+  errno = saved_errno;
+  return dir;
+#else
   return fdopendir_with_dup (fd, -1);
+#endif
 }
 
 /* Like fdopendir, except that if OLDER_DUPFD is not -1, it is known

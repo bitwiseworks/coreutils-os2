@@ -37,7 +37,7 @@ orig_freopen (const char *filename, const char *mode, FILE *stream)
 FILE *
 rpl_freopen (const char *filename, const char *mode, FILE *stream)
 {
-#if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
+#if (defined _WIN32 || defined __WIN32__ || defined __KLIBC__) && ! defined __CYGWIN__
   if (strcmp (filename, "/dev/null") == 0)
     filename = "NUL";
 #endif

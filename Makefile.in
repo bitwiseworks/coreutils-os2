@@ -1235,7 +1235,7 @@ top_srcdir = @top_srcdir@
 
 # Some tests always need root privileges, others need them only sometimes.
 ALL_RECURSIVE_TARGETS = install-root check-root distcheck-hook
-SUBDIRS = lib src doc man po tests gnulib-tests
+SUBDIRS = lib src doc po tests gnulib-tests
 changelog_etc = \
   ChangeLog-2005			\
   ChangeLog-2006			\

@@ -508,6 +508,7 @@ _GL_WARN_ON_USE (ftruncate, "ftruncate is unportable - "
 #endif
 
 
+ifndef __KLIBC__
 #if @GNULIB_GETCWD@
 /* Get the name of the current working directory, and put it in SIZE bytes
    of BUF.
@@ -538,6 +539,7 @@ _GL_WARN_ON_USE (getcwd, "getcwd is unportable - "
                  "use gnulib module getcwd for portability");
 # endif
 #endif
+#endif // __KLIBC__
 
 
 #if @GNULIB_GETDOMAINNAME@

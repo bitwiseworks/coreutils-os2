@@ -223,6 +223,10 @@ pthread_mutex_unlock (pthread_mutex_t *mutex)
 
 #if ! @HAVE_PTHREAD_SPINLOCK_T@
 
+#ifdef __KLIBC__
+#define PTHREAD_PROCESS_PRIVATE 0
+#endif
+
 /* Approximate spinlocks with mutexes.  */
 
 typedef pthread_mutex_t pthread_spinlock_t;

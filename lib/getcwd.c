@@ -14,6 +14,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#ifndef __KLIBC__ /* This sucks big time for us guys that sometimes have drive letters. */
+
 #if !_LIBC
 # include <config.h>
 # include <unistd.h>
@@ -74,7 +76,7 @@
 # endif
 #endif
 
-#if D_INO_IN_DIRENT
+#if D_INO_IN_DIRENT && !defined(__INNOTEK_LIBC__) /* this will be fix in 0.7 and will then be removed! */
 # define MATCHING_INO(dp, ino) ((dp)->d_ino == (ino))
 #else
 # define MATCHING_INO(dp, ino) true
@@ -436,3 +438,5 @@ __getcwd (char *buf, size_t size)
 #ifdef weak_alias
 weak_alias (__getcwd, getcwd)
 #endif
+
+#endif /* !__KLIBC__ */

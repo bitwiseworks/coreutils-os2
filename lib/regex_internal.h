@@ -420,7 +420,9 @@ struct re_dfa_t;
 typedef struct re_dfa_t re_dfa_t;
 
 #ifndef _LIBC
-# if defined __i386__ && !defined __EMX__
+# ifdef __KLIBC__
+#   define internal_function   __attribute ((optlink))
+# elif defined __i386__ && !defined __EMX__
 #  define internal_function   __attribute ((regparm (3), stdcall))
 # else
 #  define internal_function

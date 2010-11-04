@@ -7420,7 +7420,7 @@ int
 main ()
 {
 
-#if !defined _WIN32 && !defined __WIN32__ && !defined __MSDOS__ && !defined __CYGWIN__
+#if !defined _WIN32 && !defined __WIN32__ && !defined __MSDOS__ && !defined __CYGWIN__ && !defined __KLIBC__
 neither MSDOS nor Windows
 #endif
   ;
