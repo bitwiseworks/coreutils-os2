@@ -264,6 +264,10 @@ main (int argc, char **argv)
   bool ok = true;
   char const *flex_date = NULL;
 
+#ifdef __KLIBC__
+  _wildcard (&argc, &argv);
+#endif
+
   initialize_main (&argc, &argv);
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");

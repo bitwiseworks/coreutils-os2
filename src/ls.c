@@ -1258,6 +1258,10 @@ main (int argc, char **argv)
   bool caught_sig[nsigs];
 #endif
 
+#ifdef __KLIBC__
+  _wildcard (&argc, &argv);
+#endif
+
   initialize_main (&argc, &argv);
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");
