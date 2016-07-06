@@ -1,5 +1,5 @@
 /* fflush.c -- allow flushing input streams
-   Copyright (C) 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 2007-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,13 +28,15 @@
 
 #include "stdio-impl.h"
 
+#include "unused-parameter.h"
+
 #undef fflush
 
 
 #if defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1 /* GNU libc, BeOS, Haiku, Linux libc5 */
 
 /* Clear the stream's ungetc buffer, preserving the value of ftello (fp).  */
-static inline void
+static void
 clear_ungetc_buffer_preserving_position (FILE *fp)
 {
   if (fp->_flags & _IO_IN_BACKUP)
@@ -45,10 +47,11 @@ clear_ungetc_buffer_preserving_position (FILE *fp)
 #else
 
 /* Clear the stream's ungetc buffer.  May modify the value of ftello (fp).  */
-static inline void
+static void
 clear_ungetc_buffer (FILE *fp)
 {
-# if defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
+# if defined __sferror || defined __DragonFly__ || defined __ANDROID__
+  /* FreeBSD, NetBSD, OpenBSD, DragonFly, Mac OS X, Cygwin, Android */
   if (HASUB (fp))
     {
       fp_->_p += fp_->_r;
@@ -60,7 +63,7 @@ clear_ungetc_buffer (FILE *fp)
       fp->_ungetc_count = 0;
       fp->_rcount = - fp->_rcount;
     }
-# elif defined _IOERR               /* AIX, HP-UX, IRIX, OSF/1, Solaris, OpenServer, mingw */
+# elif defined _IOERR               /* Minix, AIX, HP-UX, IRIX, OSF/1, Solaris, OpenServer, mingw, NonStop Kernel */
   /* Nothing to do.  */
 # else                              /* other implementations */
   fseeko (fp, 0, SEEK_CUR);
@@ -69,9 +72,12 @@ clear_ungetc_buffer (FILE *fp)
 
 #endif
 
-#if (defined __sferror || defined __DragonFly__) && defined __SNPT /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
+#if ! (defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1 /* GNU libc, BeOS, Haiku, Linux libc5 */)
 
-static inline int
+# if (defined __sferror || defined __DragonFly__ || defined __ANDROID__) && defined __SNPT
+/* FreeBSD, NetBSD, OpenBSD, DragonFly, Mac OS X, Cygwin, Android */
+
+static int
 disable_seek_optimization (FILE *fp)
 {
   int saved_flags = fp_->_flags & (__SOPT | __SNPT);
@@ -79,22 +85,24 @@ disable_seek_optimization (FILE *fp)
   return saved_flags;
 }
 
-static inline void
+static void
 restore_seek_optimization (FILE *fp, int saved_flags)
 {
   fp_->_flags = (fp_->_flags & ~(__SOPT | __SNPT)) | saved_flags;
 }
 
-#endif
+# else
 
-static inline void
-update_fpos_cache (FILE *fp, off_t pos)
+static void
+update_fpos_cache (FILE *fp _GL_UNUSED_PARAMETER,
+                   off_t pos _GL_UNUSED_PARAMETER)
 {
-#if defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
-# if defined __CYGWIN__
+#  if defined __sferror || defined __DragonFly__ || defined __ANDROID__
+  /* FreeBSD, NetBSD, OpenBSD, DragonFly, Mac OS X, Cygwin, Android */
+#   if defined __CYGWIN__
   /* fp_->_offset is typed as an integer.  */
   fp_->_offset = pos;
-# else
+#   else
   /* fp_->_offset is an fpos_t.  */
   /* Use a union, since on NetBSD, the compilation flags determine
      whether fpos_t is typedef'd to off_t or a struct containing a
@@ -106,10 +114,12 @@ update_fpos_cache (FILE *fp, off_t pos)
     } u;
   u.o = pos;
   fp_->_offset = u.f;
-# endif
+#   endif
   fp_->_flags |= __SOFF;
-#endif
+#  endif
 }
+# endif
+#endif
 
 /* Flush all pending data on STREAM according to POSIX rules.  Both
    output and seekable input streams are supported.  */
@@ -188,7 +198,8 @@ rpl_fflush (FILE *stream)
         return result;
     }
 
-# if (defined __sferror || defined __DragonFly__) && defined __SNPT /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
+# if (defined __sferror || defined __DragonFly__ || defined __ANDROID__) && defined __SNPT
+    /* FreeBSD, NetBSD, OpenBSD, DragonFly, Mac OS X, Cygwin, Android */
 
     {
       /* Disable seek optimization for the next fseeko call.  This tells the

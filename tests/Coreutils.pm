@@ -1,7 +1,7 @@
 package Coreutils;
 # This is a testing framework.
 
-# Copyright (C) 1998, 2000-2002, 2004-2010 Free Software Foundation, Inc.
+# Copyright (C) 1998-2016 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ my @Types = qw (IN IN_PIPE OUT ERR AUX CMP EXIT PRE POST OUT_SUBST
 my %Types = map {$_ => 1} @Types;
 my %Zero_one_type = map {$_ => 1}
    qw (OUT ERR EXIT PRE POST OUT_SUBST ERR_SUBST ENV);
-my $srcdir = $ENV{srcdir};
+my $srcdir = "$ENV{srcdir}";
 my $Global_count = 1;
 
 # When running in a DJGPP environment, make $ENV{SHELL} point to bash.
@@ -46,9 +46,9 @@ defined $ENV{DJDIR}
 # ================
 # 'contents'               contents only (file name is derived from test name)
 # {filename => 'contents'} filename and contents
-# {filename => undef}      filename only -- $(srcdir)/filename must exist
+# {filename => undef}      filename only -- $(srcdir)/tests/filename must exist
 #
-# FIXME: If there is more than one input file, then you can't specify `REDIR'.
+# FIXME: If there is more than one input file, then you can't specify 'REDIR'.
 # PIPE is still ok.
 #
 # I/O spec: a hash ref with the following properties
@@ -60,14 +60,14 @@ defined $ENV{DJDIR}
 # {OUT => {'filename'=>undef}} compare contents of existing filename to
 #           stdout from cmd
 # {OUT => {'filename'=>[$CTOR, $DTOR]}} $CTOR and $DTOR are references to
-#           functions, each which is passed the single argument `filename'.
-#           $CTOR must create `filename'.
-#           DTOR may be omitted in which case `sub{unlink @_[0]}' is used.
+#           functions, each which is passed the single argument 'filename'.
+#           $CTOR must create 'filename'.
+#           DTOR may be omitted in which case 'sub{unlink @_[0]}' is used.
 #           FIXME: implement this
 # {ERR => ...}
 #           Same as for OUT, but compare with stderr, not stdout.
 # {OUT_SUBST => 's/variable_output/expected_output/'}
-#   Transform actual standard output before comparing it against expected output.
+#   Transform actual standard output before comparing it against expected.
 #   This is useful e.g. for programs like du that produce output that
 #   varies a lot from system.  E.g., an empty file may consume zero file
 #   blocks, or more, depending on the OS and on the file system type.
@@ -78,7 +78,7 @@ defined $ENV{DJDIR}
 #   diagnostics: Operation not permitted, Not owner, and Permission denied.
 # {EXIT => N} expect exit status of cmd to be N
 # {ENV => 'VAR=val ...'}
-#   Prepend 'VAR=val ...' to the command that we execute via `system'.
+#   Prepend 'VAR=val ...' to the command that we execute via 'system'.
 # {ENV_DEL => 'VAR'}
 #   Remove VAR from the environment just before running the corresponding
 #   command, and restore any value just afterwards.
@@ -91,7 +91,7 @@ defined $ENV{DJDIR}
 # If the EXIT-keyed one is omitted, then expect the exit status to be zero.
 
 # FIXME: Make sure that no junkfile is also listed as a
-# non-junkfile (i.e. with undef for contents)
+# non-junkfile (i.e., with undef for contents)
 
 sub _shell_quote ($)
 {
@@ -114,7 +114,7 @@ sub _create_file ($$$$)
       ++$Global_count;
     }
 
-  warn "creating file `$file' with contents `$data'\n" if $debug;
+  warn "creating file '$file' with contents '$data'\n" if $debug;
 
   # The test spec gave a string.
   # Write it to a temp file and return tempfile name.
@@ -130,14 +130,14 @@ sub _compare_files ($$$$$)
 {
   my ($program_name, $test_name, $in_or_out, $actual, $expected) = @_;
 
-  my $differ = compare ($expected, $actual);
+  my $differ = compare ($actual, $expected);
   if ($differ)
     {
       my $info = (defined $in_or_out ? "std$in_or_out " : '');
       warn "$program_name: test $test_name: ${info}mismatch, comparing "
-        . "$actual (actual) and $expected (expected)\n";
+        . "$expected (expected) and $actual (actual)\n";
       # Ignore any failure, discard stderr.
-      system "diff -c $actual $expected 2>/dev/null";
+      system "diff -c $expected $actual 2>/dev/null";
     }
 
   return $differ;
@@ -183,9 +183,9 @@ sub _process_file_spec ($$$$$)
   else
     {
       # FIXME: put $srcdir in here somewhere
-      warn "$program_name: $test_name: specified file `$file' does"
+      warn "$program_name: $test_name: specified file '$file' does"
         . " not exist\n"
-          if ! -f "$srcdir/$file";
+          if ! -f "$srcdir/tests/$file";
     }
 
   return $file;
@@ -213,10 +213,10 @@ sub getlimits()
 }
 
 # FIXME: cleanup on interrupt
-# FIXME: extract `do_1_test' function
+# FIXME: extract 'do_1_test' function
 
 # FIXME: having to include $program_name here is an expedient kludge.
-# Library code doesn't `die'.
+# Library code doesn't 'die'.
 sub run_tests ($$$$$)
 {
   my ($program_name, $prog, $t_spec, $save_temps, $verbose) = @_;
@@ -224,6 +224,7 @@ sub run_tests ($$$$$)
   # To indicate that $prog is a shell built-in, you'd make it a string 'ref'.
   # E.g., call run_tests ($prog, \$prog, \@Tests, $save_temps, $verbose);
   # If it's a ref, invoke it via "env":
+  my $built_prog = ref $prog ? $$prog : $prog;
   my @prog = ref $prog ? (qw(env --), $$prog) : $prog;
 
   # Warn about empty t_spec.
@@ -271,6 +272,9 @@ sub run_tests ($$$$$)
     }
   return 1 if $bad_test_name;
 
+  $ENV{built_programs} =~ /\b$built_prog\b/ ||
+    CuSkip::skip "required program(s) not built [$built_prog]\n";
+
   # FIXME check exit status
   system (@prog, '--version') if $verbose;
 
@@ -314,7 +318,7 @@ sub run_tests ($$$$$)
             . " expected 1\n"
               if $n != 1;
           my ($type, $val) = each %$io_spec;
-          die "$program_name: $test_name: invalid key `$type' in test spec\n"
+          die "$program_name: $test_name: invalid key '$type' in test spec\n"
             if ! $Types{$type};
 
           # Make sure there's no more than one of OUT, ERR, EXIT, etc.
@@ -350,7 +354,7 @@ sub run_tests ($$$$$)
                         or die "$program_name: $test_name: CMP spec has $n "
                           . "elements -- expected 1\n";
 
-                      # Replace any `@AUX@' in the key of %$e.
+                      # Replace any '@AUX@' in the key of %$e.
                       my ($ff, $val) = each %$e;
                       my $new_ff = _at_replace $expect, $ff;
                       if ($new_ff ne $ff)
@@ -474,7 +478,7 @@ sub run_tests ($$$$$)
             and $pushed_env{$env_sym} = $val;
         }
 
-      warn "Running command: `$cmd_str'\n" if $debug;
+      warn "Running command: '$cmd_str'\n" if $debug;
       my $rc = 0xffff & system $cmd_str;
 
       # Restore any environment setting we changed via a deletion.
@@ -486,7 +490,7 @@ sub run_tests ($$$$$)
       if ($rc == 0xff00)
         {
           warn "$program_name: test $test_name failed: command failed:\n"
-            . "  `$cmd_str': $!\n";
+            . "  '$cmd_str': $!\n";
           $fail = 1;
           goto cleanup;
         }
@@ -507,7 +511,8 @@ sub run_tests ($$$$$)
             {
               my $out_file = $actual{$eo};
               open IN, $out_file
-                or (warn "$program_name: cannot open $out_file for reading: $!\n"),
+                or (warn
+                    "$program_name: cannot open $out_file for reading: $!\n"),
                   $fail = 1, next;
               $actual_data{$eo} = <IN>;
               close IN
@@ -575,7 +580,7 @@ sub run_tests ($$$$$)
 }
 
 # For each test in @$TESTS, generate two additional tests,
-# one using stdin, the other using a pipe. I.e., given this one
+# one using stdin, the other using a pipe.  I.e., given this one
 # ['idem-0', {IN=>''}, {OUT=>''}],
 # generate these:
 # ['idem-0.r', '<', {IN=>''}, {OUT=>''}],

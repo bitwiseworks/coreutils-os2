@@ -1,7 +1,6 @@
 /* Compare numeric strings.  This is an internal include file.
 
-   Copyright (C) 1988, 1991-1993, 1995-1996, 1998-2000, 2003-2006, 2009-2010
-   Free Software Foundation, Inc.
+   Copyright (C) 1988-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -34,7 +33,7 @@
    - It's typically faster.
    POSIX says that only '0' through '9' are digits.  Prefer ISDIGIT to
    isdigit unless it's important to use the locale's definition
-   of `digit' even when the host does not conform to POSIX.  */
+   of 'digit' even when the host does not conform to POSIX.  */
 # define ISDIGIT(c) ((unsigned int) (c) - '0' <= 9)
 
 
@@ -71,7 +70,7 @@
      if digit return -1, else 0
    return 0 */
 
-static inline int
+static inline int _GL_ATTRIBUTE_PURE
 fraccompare (char const *a, char const *b, char decimal_point)
 {
   if (*a == decimal_point && *b == decimal_point)
@@ -111,7 +110,7 @@ fraccompare (char const *a, char const *b, char decimal_point)
    causes comparisons to act as if there is no decimal point
    character, and likewise for THOUSANDS_SEP.  */
 
-static inline int
+static inline int _GL_ATTRIBUTE_PURE
 numcompare (char const *a, char const *b,
             int decimal_point, int thousands_sep)
 {

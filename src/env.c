@@ -1,5 +1,5 @@
 /* env - run a program in a modified environment
-   Copyright (C) 1986, 1991-2005, 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 1986-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 #include "error.h"
 #include "quote.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "env"
 
 #define AUTHORS \
@@ -46,8 +46,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -55,9 +54,13 @@ Usage: %s [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n"),
               program_name);
       fputs (_("\
 Set each NAME to VALUE in the environment and run COMMAND.\n\
-\n\
+"), stdout);
+
+      emit_mandatory_arg_note ();
+
+      fputs (_("\
   -i, --ignore-environment  start with an empty environment\n\
-  -0, --null           end each output line with 0 byte rather than newline\n\
+  -0, --null           end each output line with NUL, not newline\n\
   -u, --unset=NAME     remove variable from the environment\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
@@ -66,7 +69,7 @@ Set each NAME to VALUE in the environment and run COMMAND.\n\
 \n\
 A mere - implies -i.  If no COMMAND, print the resulting environment.\n\
 "), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -123,13 +126,17 @@ main (int argc, char **argv)
   if (optind < argc && STREQ (argv[optind], "-"))
     ++optind;
 
-  while (optind < argc && strchr (argv[optind], '='))
-    if (putenv (argv[optind++]))
-      {
-        char *name = argv[optind - 1];
-        *(strchr (name, '=')) = '\0';
-        error (EXIT_CANCELED, errno, _("cannot set %s"), quote (name));
-      }
+  char *eq;
+  while (optind < argc && (eq = strchr (argv[optind], '=')))
+    {
+      if (putenv (argv[optind]))
+        {
+          *eq = '\0';
+          error (EXIT_CANCELED, errno, _("cannot set %s"),
+                 quote (argv[optind]));
+        }
+      optind++;
+    }
 
   /* If no program is specified, print the environment and exit. */
   if (argc <= optind)
@@ -137,7 +144,7 @@ main (int argc, char **argv)
       char *const *e = environ;
       while (*e)
         printf ("%s%c", *e++, opt_nul_terminate_output ? '\0' : '\n');
-      exit (EXIT_SUCCESS);
+      return EXIT_SUCCESS;
     }
 
   if (opt_nul_terminate_output)
@@ -148,9 +155,7 @@ main (int argc, char **argv)
 
   execvp (argv[optind], &argv[optind]);
 
-  {
-    int exit_status = (errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE);
-    error (0, errno, "%s", argv[optind]);
-    exit (exit_status);
-  }
+  int exit_status = errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE;
+  error (0, errno, "%s", quote (argv[optind]));
+  return exit_status;
 }

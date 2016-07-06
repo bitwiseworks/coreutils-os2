@@ -1,10 +1,11 @@
-'\" Copyright (C) 2009-2010 Free Software Foundation, Inc.
+'\" Copyright (C) 2009-2016 Free Software Foundation, Inc.
 '\"
 '\" This is free software.  You may redistribute copies of it under the terms
 '\" of the GNU General Public License <http://www.gnu.org/licenses/gpl.html>.
 '\" There is NO WARRANTY, to the extent permitted by law.
 [NAME]
-stdbuf \- Run COMMAND, with modified buffering operations for its standard streams.
+stdbuf \-
+Run COMMAND, with modified buffering operations for its standard streams.
 [DESCRIPTION]
 .\" Add any additional description here
 [EXAMPLES]
@@ -12,5 +13,5 @@ stdbuf \- Run COMMAND, with modified buffering operations for its standard strea
 .br
 This will immedidately display unique entries from access.log
 [BUGS]
-On GLIBC platforms, specifying a buffer size, i.e. using fully buffered mode
+On GLIBC platforms, specifying a buffer size, i.e., using fully buffered mode
 will result in undefined operation.

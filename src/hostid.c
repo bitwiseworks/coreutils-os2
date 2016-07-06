@@ -1,6 +1,6 @@
 /* print the hexadecimal identifier for the current host
 
-   Copyright (C) 1997, 1999-2004, 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 1997-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@
 #include "error.h"
 #include "quote.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "hostid"
 
 #define AUTHORS proper_name ("Jim Meyering")
@@ -36,8 +36,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -47,7 +46,7 @@ Print the numeric identifier (in hexadecimal) for the current host.\n\
 "), program_name);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -85,5 +84,5 @@ main (int argc, char **argv)
 
   printf ("%08x\n", id);
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

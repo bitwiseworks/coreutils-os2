@@ -1,5 +1,5 @@
 /* date - print or set the system date and time
-   Copyright (C) 1989-2010 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,12 +33,12 @@
 #include "stat-time.h"
 #include "fprintftime.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "date"
 
 #define AUTHORS proper_name ("David MacKenzie")
 
-static bool show_date (const char *format, struct timespec when);
+static bool show_date (const char *, struct timespec, timezone_t);
 
 enum Time_spec
 {
@@ -87,7 +87,7 @@ static struct option const long_options[] =
 {
   {"date", required_argument, NULL, 'd'},
   {"file", required_argument, NULL, 'f'},
-  {"iso-8601", optional_argument, NULL, 'I'}, /* Deprecated.  */
+  {"iso-8601", optional_argument, NULL, 'I'},
   {"reference", required_argument, NULL, 'r'},
   {"rfc-822", no_argument, NULL, 'R'},
   {"rfc-2822", no_argument, NULL, 'R'},
@@ -117,8 +117,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -128,23 +127,37 @@ Usage: %s [OPTION]... [+FORMAT]\n\
               program_name, program_name);
       fputs (_("\
 Display the current time in the given FORMAT, or set the system date.\n\
-\n\
-  -d, --date=STRING         display time described by STRING, not `now'\n\
-  -f, --file=DATEFILE       like --date once for each line of DATEFILE\n\
+"), stdout);
+
+      emit_mandatory_arg_note ();
+
+      fputs (_("\
+  -d, --date=STRING          display time described by STRING, not 'now'\n\
+  -f, --file=DATEFILE        like --date; once for each line of DATEFILE\n\
 "), stdout);
       fputs (_("\
-  -r, --reference=FILE      display the last modification time of FILE\n\
-  -R, --rfc-2822            output date and time in RFC 2822 format.\n\
-                            Example: Mon, 07 Aug 2006 12:34:56 -0600\n\
+  -I[FMT], --iso-8601[=FMT]  output date/time in ISO 8601 format.\n\
+                               FMT='date' for date only (the default),\n\
+                               'hours', 'minutes', 'seconds', or 'ns'\n\
+                               for date and time to the indicated precision.\n\
+                               Example: 2006-08-14T02:34:56-0600\n\
 "), stdout);
       fputs (_("\
-      --rfc-3339=TIMESPEC   output date and time in RFC 3339 format.\n\
-                            TIMESPEC=`date', `seconds', or `ns' for\n\
-                            date and time to the indicated precision.\n\
-                            Date and time components are separated by\n\
-                            a single space: 2006-08-07 12:34:56-06:00\n\
-  -s, --set=STRING          set time described by STRING\n\
-  -u, --utc, --universal    print or set Coordinated Universal Time\n\
+  -R, --rfc-2822             output date and time in RFC 2822 format.\n\
+                               Example: Mon, 14 Aug 2006 02:34:56 -0600\n\
+"), stdout);
+      fputs (_("\
+      --rfc-3339=FMT         output date/time in RFC 3339 format.\n\
+                               FMT='date', 'seconds', or 'ns'\n\
+                               for date and time to the indicated precision.\n\
+                               Example: 2006-08-14 02:34:56-06:00\n\
+"), stdout);
+      fputs (_("\
+  -r, --reference=FILE       display the last modification time of FILE\n\
+"), stdout);
+      fputs (_("\
+  -s, --set=STRING           set time described by STRING\n\
+  -u, --utc, --universal     print or set Coordinated Universal Time (UTC)\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
@@ -163,7 +176,7 @@ FORMAT controls the output.  Interpreted sequences are:\n\
 "), stdout);
       fputs (_("\
   %C   century; like %Y, except omit last two digits (e.g., 20)\n\
-  %d   day of month (e.g, 01)\n\
+  %d   day of month (e.g., 01)\n\
   %D   date; same as %m/%d/%y\n\
   %e   day of month, space padded; same as %_d\n\
 "), stdout);
@@ -179,8 +192,8 @@ FORMAT controls the output.  Interpreted sequences are:\n\
   %j   day of year (001..366)\n\
 "), stdout);
       fputs (_("\
-  %k   hour ( 0..23)\n\
-  %l   hour ( 1..12)\n\
+  %k   hour, space padded ( 0..23); same as %_H\n\
+  %l   hour, space padded ( 1..12); same as %_I\n\
   %m   month (01..12)\n\
   %M   minute (00..59)\n\
 "), stdout);
@@ -212,8 +225,8 @@ FORMAT controls the output.  Interpreted sequences are:\n\
   %Y   year\n\
 "), stdout);
       fputs (_("\
-  %z   +hhmm numeric timezone (e.g., -0400)\n\
-  %:z  +hh:mm numeric timezone (e.g., -04:00)\n\
+  %z   +hhmm numeric time zone (e.g., -0400)\n\
+  %:z  +hh:mm numeric time zone (e.g., -04:00)\n\
   %::z  +hh:mm:ss numeric time zone (e.g., -04:00:00)\n\
   %:::z  numeric time zone with : to necessary precision (e.g., -04, +05:30)\n\
   %Z   alphabetic time zone abbreviation (e.g., EDT)\n\
@@ -221,7 +234,7 @@ FORMAT controls the output.  Interpreted sequences are:\n\
 By default, date pads numeric fields with zeroes.\n\
 "), stdout);
       fputs (_("\
-The following optional flags may follow `%':\n\
+The following optional flags may follow '%':\n\
 \n\
   -  (hyphen) do not pad the field\n\
   _  (underscore) pad with spaces\n\
@@ -236,7 +249,19 @@ then an optional modifier, which is either\n\
 E to use the locale's alternate representations if available, or\n\
 O to use the locale's alternate numeric symbols if available.\n\
 "), stdout);
-      emit_ancillary_info ();
+      fputs (_("\
+\n\
+Examples:\n\
+Convert seconds since the epoch (1970-01-01 UTC) to a date\n\
+  $ date --date='@2147483647'\n\
+\n\
+Show the time on the west coast of the US (use tzselect(1) to find TZ)\n\
+  $ TZ='America/Los_Angeles' date\n\
+\n\
+Show the local time for 9AM next Friday on the west coast of the US\n\
+  $ date --date='TZ=\"America/Los_Angeles\" 09:00 next Fri'\n\
+"), stdout);
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -247,7 +272,7 @@ O to use the locale's alternate numeric symbols if available.\n\
    Return true if successful.  */
 
 static bool
-batch_convert (const char *input_filename, const char *format)
+batch_convert (const char *input_filename, const char *format, timezone_t tz)
 {
   bool ok;
   FILE *in_stream;
@@ -265,7 +290,7 @@ batch_convert (const char *input_filename, const char *format)
       in_stream = fopen (input_filename, "r");
       if (in_stream == NULL)
         {
-          error (EXIT_FAILURE, errno, "%s", quote (input_filename));
+          error (EXIT_FAILURE, errno, "%s", quotef (input_filename));
         }
     }
 
@@ -290,12 +315,12 @@ batch_convert (const char *input_filename, const char *format)
         }
       else
         {
-          ok &= show_date (format, when);
+          ok &= show_date (format, when, tz);
         }
     }
 
   if (fclose (in_stream) == EOF)
-    error (EXIT_FAILURE, errno, "%s", quote (input_filename));
+    error (EXIT_FAILURE, errno, "%s", quotef (input_filename));
 
   free (line);
 
@@ -357,10 +382,10 @@ main (int argc, char **argv)
             static char const iso_8601_format[][32] =
               {
                 "%Y-%m-%d",
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%S,%N%z",
-                "%Y-%m-%dT%H%z",
-                "%Y-%m-%dT%H:%M%z"
+                "%Y-%m-%dT%H:%M:%S%:z",
+                "%Y-%m-%dT%H:%M:%S,%N%:z",
+                "%Y-%m-%dT%H%:z",
+                "%Y-%m-%dT%H:%M%:z"
               };
             enum Time_spec i =
               (optarg
@@ -380,7 +405,7 @@ main (int argc, char **argv)
           set_date = true;
           break;
         case 'u':
-          /* POSIX says that `date -u' is equivalent to setting the TZ
+          /* POSIX says that 'date -u' is equivalent to setting the TZ
              environment variable, so this option should do nothing other
              than setting TZ.  */
           if (putenv (bad_cast ("TZ=UTC0")) != 0)
@@ -436,9 +461,9 @@ main (int argc, char **argv)
       else if (set_date || option_specified_date)
         {
           error (0, 0,
-                 _("the argument %s lacks a leading `+';\n"
+                 _("the argument %s lacks a leading '+';\n"
                    "when using an option to specify date(s), any non-option\n"
-                   "argument must be a format string beginning with `+'"),
+                   "argument must be a format string beginning with '+'"),
                  quote (argv[optind]));
           usage (EXIT_FAILURE);
         }
@@ -460,8 +485,10 @@ main (int argc, char **argv)
         }
     }
 
+  timezone_t tz = tzalloc (getenv ("TZ"));
+
   if (batch_file != NULL)
-    ok = batch_convert (batch_file, format);
+    ok = batch_convert (batch_file, format, tz);
   else
     {
       bool valid_date = true;
@@ -493,7 +520,7 @@ main (int argc, char **argv)
           if (reference != NULL)
             {
               if (stat (reference, &refstats) != 0)
-                error (EXIT_FAILURE, errno, "%s", reference);
+                error (EXIT_FAILURE, errno, "%s", quotef (reference));
               when = get_stat_mtime (&refstats);
             }
           else
@@ -518,17 +545,17 @@ main (int argc, char **argv)
             }
         }
 
-      ok &= show_date (format, when);
+      ok &= show_date (format, when, tz);
     }
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 /* Display the date and/or time in WHEN according to the format specified
    in FORMAT, followed by a newline.  Return true if successful.  */
 
 static bool
-show_date (const char *format, struct timespec when)
+show_date (const char *format, struct timespec when, timezone_t tz)
 {
   struct tm *tm;
 
@@ -536,13 +563,14 @@ show_date (const char *format, struct timespec when)
   if (! tm)
     {
       char buf[INT_BUFSIZE_BOUND (intmax_t)];
-      error (0, 0, _("time %s is out of range"), timetostr (when.tv_sec, buf));
+      error (0, 0, _("time %s is out of range"),
+             quote (timetostr (when.tv_sec, buf)));
       return false;
     }
 
   if (format == rfc_2822_format)
     setlocale (LC_TIME, "C");
-  fprintftime (stdout, format, tm, 0, when.tv_nsec);
+  fprintftime (stdout, format, tm, tz, when.tv_nsec);
   fputc ('\n', stdout);
   if (format == rfc_2822_format)
     setlocale (LC_TIME, "");

@@ -2,7 +2,7 @@
 
 /* Modified to run with the GNU shell by bfox. */
 
-/* Copyright (C) 1987-2005, 2007-2010 Free Software Foundation, Inc.
+/* Copyright (C) 1987-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,6 +20,12 @@
 /* Define TEST_STANDALONE to get the /bin/test version.  Otherwise, you get
    the shell builtin version. */
 
+/* Without this pragma, gcc 4.6.2 20111027 mistakenly suggests that
+   the advance function might be candidate for attribute 'pure'.  */
+#if (__GNUC__ == 4 && 6 <= __GNUC_MINOR__) || 4 < __GNUC__
+# pragma GCC diagnostic ignored "-Wsuggest-attribute=pure"
+#endif
+
 #include <config.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -30,7 +36,7 @@
 # define LBRACKET 0
 #endif
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #if LBRACKET
 # define PROGRAM_NAME "["
 #else
@@ -42,6 +48,9 @@
 #include "stat-time.h"
 #include "strnumcmp.h"
 
+#include <stdarg.h>
+#include "verror.h"
+
 #if HAVE_SYS_PARAM_H
 # include <sys/param.h>
 #endif
@@ -51,10 +60,12 @@ enum { TEST_TRUE, TEST_FALSE, TEST_FAILURE };
 
 #if defined TEST_STANDALONE
 # define test_exit(val) exit (val)
+# define test_main_return(val) return val
 #else
    static jmp_buf test_exit_buf;
    static int test_error_return = 0;
 # define test_exit(val) test_error_return = val, longjmp (test_exit_buf, 1)
+# define test_main_return(val) test_exit (val)
 #endif /* !TEST_STANDALONE */
 
 static int pos;		/* The offset of the current argument in ARGV. */
@@ -73,22 +84,21 @@ static bool term (void);
 static bool and (void);
 static bool or (void);
 
-static void test_syntax_error (char const *format, char const *arg)
+static void test_syntax_error (char const *format, ...)
      ATTRIBUTE_NORETURN;
 static void beyond (void) ATTRIBUTE_NORETURN;
 
 static void
-test_syntax_error (char const *format, char const *arg)
+test_syntax_error (char const *format, ...)
 {
-  fprintf (stderr, "%s: ", argv[0]);
-  fprintf (stderr, format, arg);
-  fputc ('\n', stderr);
-  fflush (stderr);
+  va_list ap;
+  va_start (ap, format);
+  verror (0, 0, format, ap);
   test_exit (TEST_FAILURE);
 }
 
 /* Increment our position in the argument list.  Check that we're not
-   past the end of the argument list.  This check is supressed if the
+   past the end of the argument list.  This check is suppressed if the
    argument is false.  */
 
 static void
@@ -173,7 +183,8 @@ get_mtime (char const *filename, struct timespec *mtime)
 static bool
 binop (char const *s)
 {
-  return ((STREQ (s,   "=")) || (STREQ (s,  "!=")) || (STREQ (s, "-nt")) ||
+  return ((STREQ (s,   "=")) || (STREQ (s,  "!=")) || (STREQ (s, "==")) ||
+          (STREQ (s,   "-nt")) ||
           (STREQ (s, "-ot")) || (STREQ (s, "-ef")) || (STREQ (s, "-eq")) ||
           (STREQ (s, "-ne")) || (STREQ (s, "-lt")) || (STREQ (s, "-le")) ||
           (STREQ (s, "-gt")) || (STREQ (s, "-ge")));
@@ -203,7 +214,7 @@ term (void)
   bool value;
   bool negated = false;
 
-  /* Deal with leading `not's.  */
+  /* Deal with leading 'not's.  */
   while (pos < argc && argv[pos][0] == '!' && argv[pos][1] == '\0')
     {
       advance (true);
@@ -231,10 +242,11 @@ term (void)
 
       value = posixtest (nargs);
       if (argv[pos] == 0)
-        test_syntax_error (_("')' expected"), NULL);
+        test_syntax_error (_("%s expected"), quote (")"));
       else
         if (argv[pos][0] != ')' || argv[pos][1])
-          test_syntax_error (_("')' expected, found %s"), argv[pos]);
+          test_syntax_error (_("%s expected, found %s"),
+                             quote_n (0, ")"), quote_n (1, argv[pos]));
       advance (false);
     }
 
@@ -250,7 +262,7 @@ term (void)
       if (test_unop (argv[pos]))
         value = unary_operator ();
       else
-        test_syntax_error (_("%s: unary operator expected"), argv[pos]);
+        test_syntax_error (_("%s: unary operator expected"), quote (argv[pos]));
     }
   else
     {
@@ -357,10 +369,11 @@ binary_operator (bool l_is_l)
         }
 
       /* FIXME: is this dead code? */
-      test_syntax_error (_("unknown binary operator"), argv[op]);
+      test_syntax_error (_("%s: unknown binary operator"), quote (argv[op]));
     }
 
-  if (argv[op][0] == '=' && !argv[op][1])
+  if (argv[op][0] == '='
+      && (!argv[op][1] || ((argv[op][1] == '=') && !argv[op][2])))
     {
       bool value = STREQ (argv[pos], argv[pos + 2]);
       pos += 3;
@@ -411,14 +424,26 @@ unary_operator (void)
       return euidaccess (argv[pos - 1], X_OK) == 0;
 
     case 'O':			/* File is owned by you? */
-      unary_advance ();
-      return (stat (argv[pos - 1], &stat_buf) == 0
-              && (geteuid () == stat_buf.st_uid));
+      {
+        unary_advance ();
+        if (stat (argv[pos - 1], &stat_buf) != 0)
+          return false;
+        errno = 0;
+        uid_t euid = geteuid ();
+        uid_t NO_UID = -1;
+        return ! (euid == NO_UID && errno) && euid == stat_buf.st_uid;
+      }
 
     case 'G':			/* File is owned by your group? */
-      unary_advance ();
-      return (stat (argv[pos - 1], &stat_buf) == 0
-              && (getegid () == stat_buf.st_gid));
+      {
+        unary_advance ();
+        if (stat (argv[pos - 1], &stat_buf) != 0)
+          return false;
+        errno = 0;
+        gid_t egid = getegid ();
+        gid_t NO_GID = -1;
+        return ! (egid == NO_GID && errno) && egid == stat_buf.st_gid;
+      }
 
     case 'f':			/* File is a file? */
       unary_advance ();
@@ -595,7 +620,7 @@ two_arguments (void)
       if (test_unop (argv[pos]))
         value = unary_operator ();
       else
-        test_syntax_error (_("%s: unary operator expected"), argv[pos]);
+        test_syntax_error (_("%s: unary operator expected"), quote (argv[pos]));
     }
   else
     beyond ();
@@ -623,7 +648,7 @@ three_arguments (void)
   else if (STREQ (argv[pos + 1], "-a") || STREQ (argv[pos + 1], "-o"))
     value = expr ();
   else
-    test_syntax_error (_("%s: binary operator expected"), argv[pos+1]);
+    test_syntax_error (_("%s: binary operator expected"), quote (argv[pos+1]));
   return (value);
 }
 
@@ -678,8 +703,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       fputs (_("\
@@ -770,7 +794,7 @@ NOTE: [ honors the --help and --version options, but test does not.\n\
 test treats each of those as it treats any other nonempty STRING.\n\
 "), stdout);
       printf (USAGE_BUILTIN_WARNING, _("test and/or ["));
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -832,11 +856,11 @@ main (int margc, char **margv)
             {
               version_etc (stdout, PROGRAM_NAME, PACKAGE_NAME, Version, AUTHORS,
                            (char *) NULL);
-              test_exit (EXIT_SUCCESS);
+              test_main_return (EXIT_SUCCESS);
             }
         }
       if (margc < 2 || !STREQ (margv[margc - 1], "]"))
-        test_syntax_error (_("missing `]'"), NULL);
+        test_syntax_error (_("missing %s"), quote ("]"));
 
       --margc;
     }
@@ -845,12 +869,12 @@ main (int margc, char **margv)
   pos = 1;
 
   if (pos >= argc)
-    test_exit (TEST_FALSE);
+    test_main_return (TEST_FALSE);
 
   value = posixtest (argc - 1);
 
   if (pos != argc)
     test_syntax_error (_("extra argument %s"), quote (argv[pos]));
 
-  test_exit (value ? TEST_TRUE : TEST_FALSE);
+  test_main_return (value ? TEST_TRUE : TEST_FALSE);
 }

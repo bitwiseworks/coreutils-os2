@@ -1,6 +1,6 @@
 # Sort a vector of pointers to data.
 
-# Copyright (C) 2007, 2009, 2010 Free Software Foundation, Inc.
+# Copyright (C) 2007, 2009-2016 Free Software Foundation, Inc.
 
 # This file is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,
@@ -9,5 +9,4 @@
 AC_DEFUN([gl_MPSORT],
 [
   AC_REQUIRE([AC_C_RESTRICT])
-  AC_LIBOBJ([mpsort])
 ])

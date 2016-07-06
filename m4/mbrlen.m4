@@ -1,5 +1,5 @@
-# mbrlen.m4 serial 3
-dnl Copyright (C) 2008, 2010 Free Software Foundation, Inc.
+# mbrlen.m4 serial 9  -*- coding: utf-8 -*-
+dnl Copyright (C) 2008, 2010-2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -13,6 +13,22 @@ AC_DEFUN([gl_FUNC_MBRLEN],
   AC_CHECK_FUNCS_ONCE([mbrlen])
   if test $ac_cv_func_mbrlen = no; then
     HAVE_MBRLEN=0
+    AC_CHECK_DECLS([mbrlen],,, [[
+/* Tru64 with Desktop Toolkit C has a bug: <stdio.h> must be included before
+   <wchar.h>.
+   BSD/OS 4.0.1 has a bug: <stddef.h>, <stdio.h> and <time.h> must be
+   included before <wchar.h>.  */
+#include <stddef.h>
+#include <stdio.h>
+#include <time.h>
+#include <wchar.h>
+]])
+    if test $ac_cv_have_decl_mbrlen = yes; then
+      dnl On Minix 3.1.8, the system's <wchar.h> declares mbrlen() although
+      dnl it does not have the function. Avoid a collision with gnulib's
+      dnl replacement.
+      REPLACE_MBRLEN=1
+    fi
   else
     dnl Most bugs affecting the system's mbrtowc function also affect the
     dnl mbrlen function. So override mbrlen whenever mbrtowc is overridden.
@@ -21,11 +37,6 @@ AC_DEFUN([gl_FUNC_MBRLEN],
     if test $REPLACE_MBRTOWC = 1; then
       REPLACE_MBRLEN=1
     fi
-  fi
-  if test $HAVE_MBRLEN = 0 || test $REPLACE_MBRLEN = 1; then
-    gl_REPLACE_WCHAR_H
-    AC_LIBOBJ([mbrlen])
-    gl_PREREQ_MBRLEN
   fi
 ])
 
@@ -56,6 +67,13 @@ changequote([,])dnl
           [AC_LANG_SOURCE([[
 #include <locale.h>
 #include <string.h>
+/* Tru64 with Desktop Toolkit C has a bug: <stdio.h> must be included before
+   <wchar.h>.
+   BSD/OS 4.0.1 has a bug: <stddef.h>, <stdio.h> and <time.h> must be
+   included before <wchar.h>.  */
+#include <stddef.h>
+#include <stdio.h>
+#include <time.h>
 #include <wchar.h>
 int main ()
 {
@@ -107,9 +125,17 @@ changequote([,])dnl
           [AC_LANG_SOURCE([[
 #include <locale.h>
 #include <string.h>
+/* Tru64 with Desktop Toolkit C has a bug: <stdio.h> must be included before
+   <wchar.h>.
+   BSD/OS 4.0.1 has a bug: <stddef.h>, <stdio.h> and <time.h> must be
+   included before <wchar.h>.  */
+#include <stddef.h>
+#include <stdio.h>
+#include <time.h>
 #include <wchar.h>
 int main ()
 {
+  int result = 0;
   /* This fails on Solaris.  */
   if (setlocale (LC_ALL, "$LOCALE_FR_UTF8") != NULL)
     {
@@ -121,7 +147,7 @@ int main ()
         {
           input[1] = '\0';
           if (mbrlen (input + 2, 5, &state) != 1)
-            return 1;
+            result |= 1;
         }
     }
   /* This fails on HP-UX 11.11.  */
@@ -135,10 +161,10 @@ int main ()
         {
           input[1] = '\0';
           if (mbrlen (input + 2, 5, &state) != 2)
-            return 1;
+            result |= 2;
         }
     }
-  return 0;
+  return result;
 }]])],
           [gl_cv_func_mbrlen_retval=yes],
           [gl_cv_func_mbrlen_retval=no],
@@ -173,6 +199,13 @@ changequote([,])dnl
           [AC_LANG_SOURCE([[
 #include <locale.h>
 #include <string.h>
+/* Tru64 with Desktop Toolkit C has a bug: <stdio.h> must be included before
+   <wchar.h>.
+   BSD/OS 4.0.1 has a bug: <stddef.h>, <stdio.h> and <time.h> must be
+   included before <wchar.h>.  */
+#include <stddef.h>
+#include <stdio.h>
+#include <time.h>
 #include <wchar.h>
 int main ()
 {
@@ -191,6 +224,40 @@ int main ()
           [gl_cv_func_mbrlen_nul_retval=no],
           [])
       fi
+    ])
+])
+
+dnl Test whether mbrlen returns the correct value on empty input.
+
+AC_DEFUN([gl_MBRLEN_EMPTY_INPUT],
+[
+  AC_REQUIRE([AC_PROG_CC])
+  AC_REQUIRE([AC_CANONICAL_HOST]) dnl for cross-compiles
+  AC_CACHE_CHECK([whether mbrlen works on empty input],
+    [gl_cv_func_mbrlen_empty_input],
+    [
+      dnl Initial guess, used when cross-compiling or when no suitable locale
+      dnl is present.
+changequote(,)dnl
+      case "$host_os" in
+                     # Guess no on AIX and glibc systems.
+        aix* | *-gnu*)
+                    gl_cv_func_mbrlen_empty_input="guessing no" ;;
+        *)          gl_cv_func_mbrlen_empty_input="guessing yes" ;;
+      esac
+changequote([,])dnl
+      AC_RUN_IFELSE(
+        [AC_LANG_SOURCE([[
+           #include <wchar.h>
+           static mbstate_t mbs;
+           int
+           main (void)
+           {
+             return mbrlen ("", 0, &mbs) != (size_t) -2;
+           }]])],
+        [gl_cv_func_mbrlen_empty_input=yes],
+        [gl_cv_func_mbrlen_empty_input=no],
+        [:])
     ])
 ])
 

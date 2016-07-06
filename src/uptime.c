@@ -1,5 +1,5 @@
 /* GNU's uptime.
-   Copyright (C) 1992-2002, 2004-2010 Free Software Foundation, Inc.
+   Copyright (C) 1992-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@
 #include "readutmp.h"
 #include "fprintftime.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "uptime"
 
 #define AUTHORS \
@@ -146,16 +146,12 @@ print_uptime (size_t n, const STRUCT_UTMP *this)
                           select_plural (updays)),
                 updays, uphours, upmins);
       else
-        printf ("up  %2d:%02d,  ", uphours, upmins);
+        printf (_("up  %2d:%02d,  "), uphours, upmins);
     }
-  printf (ngettext ("%lu user", "%lu users", entries),
+  printf (ngettext ("%lu user", "%lu users", select_plural (entries)),
           (unsigned long int) entries);
 
-#if defined HAVE_GETLOADAVG || defined C_GETLOADAVG
   loads = getloadavg (avg, 3);
-#else
-  loads = -1;
-#endif
 
   if (loads == -1)
     putchar ('\n');
@@ -180,22 +176,23 @@ static void
 uptime (const char *filename, int options)
 {
   size_t n_users;
-  STRUCT_UTMP *utmp_buf;
+  STRUCT_UTMP *utmp_buf = NULL;
 
 #if HAVE_UTMPX_H || HAVE_UTMP_H
   if (read_utmp (filename, &n_users, &utmp_buf, options) != 0)
-    error (EXIT_FAILURE, errno, "%s", filename);
+    error (EXIT_FAILURE, errno, "%s", quotef (filename));
 #endif
 
   print_uptime (n_users, utmp_buf);
+
+  IF_LINT (free (utmp_buf));
 }
 
 void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]... [FILE]\n"), program_name);
@@ -220,7 +217,7 @@ If FILE is not specified, use %s.  %s as FILE is common.\n\
               UTMP_FILE, WTMP_FILE);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -256,5 +253,5 @@ main (int argc, char **argv)
       usage (EXIT_FAILURE);
     }
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

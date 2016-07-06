@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Test the gnulib dirname module.
-   Copyright (C) 2005, 2006, 2007, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2005-2007, 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,7 +54,7 @@ static struct test tests[] = {
   {"",          ".",    "",     "",     "",     false,  false},
   {".",         ".",    ".",    ".",    ".",    false,  false},
   {"..",        ".",    "..",   "..",   "..",   false,  false},
-#if FILE_SYSTEM_BACKSLASH_IS_FILE_NAME_SEPARATOR
+#if ISSLASH ('\\')
   {"a\\",       ".",    "a\\",  "a\\",  "a",    true,   false},
   {"a\\b",      "a",    "b",    "b",    "a\\b", false,  false},
   {"\\",        "\\",   "",     "\\",   "\\",   false,  true},
@@ -77,7 +75,7 @@ static struct test tests[] = {
   {"//\\",      "/",    "\\",   "\\",   "//\\", false,  true},
 # endif
 #endif
-#if FILE_SYSTEM_ACCEPTS_DRIVE_LETTER_PREFIX
+#if ISSLASH ('\\')
 # if FILE_SYSTEM_DRIVE_PREFIX_CAN_BE_RELATIVE
   {"c:",        "c:",   "",     "c:",   "c:",   false,  false},
   {"c:/",       "c:/",  "",     "c:/",  "c:/",  false,  true},
@@ -107,7 +105,7 @@ static struct test tests[] = {
   {"a/b:c",     "a",    "b:c",  "./b:c","a/b:c",false,  false},
   {"a/b:c/",    "a",    "b:c/", "./b:c/","a/b:c",true,  false},
 # endif
-#else /* ! FILE_SYSTEM_ACCEPTS_DRIVE_LETTER_PREFIX */
+#else /* ! ISSLASH ('\\') */
   {"c:",        ".",    "c:",   "c:",   "c:",   false,  false},
   {"c:/",       ".",    "c:/",  "c:/",  "c:",   true,   false},
   {"c://",      ".",    "c://", "c:/",  "c:",   true,   false},
@@ -151,14 +149,15 @@ main (void)
                  || (dirlen + 1 == strlen (dir) && dir[dirlen] == '.'))))
         {
           ok = false;
-          printf ("dir_name `%s': got `%s' len %d, expected `%s' len %ld\n",
+          printf ("dir_name '%s': got '%s' len %d,"
+                  " expected '%s' len %lu\n",
                   t->name, dir, dirlen,
                   t->dir, (unsigned long) strlen (t->dir));
         }
       if (strcmp (last, t->last))
         {
           ok = false;
-          printf ("last_component `%s': got `%s', expected `%s'\n",
+          printf ("last_component '%s': got '%s', expected '%s'\n",
                   t->name, last, t->last);
         }
       if (! (strcmp (base, t->base) == 0
@@ -167,21 +166,22 @@ main (void)
                      && ISSLASH (base[baselen])))))
         {
           ok = false;
-          printf ("base_name `%s': got `%s' len %d, expected `%s' len %ld\n",
+          printf ("base_name '%s': got '%s' len %d,"
+                  " expected '%s' len %lu\n",
                   t->name, base, baselen,
                   t->base, (unsigned long) strlen (t->base));
         }
       if (strcmp (stripped, t->stripped) || modified != t->modified)
         {
           ok = false;
-          printf ("strip_trailing_slashes `%s': got %s %s, expected %s %s\n",
+          printf ("strip_trailing_slashes '%s': got %s %s, expected %s %s\n",
                   t->name, stripped, modified ? "changed" : "unchanged",
                   t->stripped, t->modified ? "changed" : "unchanged");
         }
       if (t->absolute != absolute)
         {
           ok = false;
-          printf ("`%s': got %s, expected %s\n", t->name,
+          printf ("'%s': got %s, expected %s\n", t->name,
                   absolute ? "absolute" : "relative",
                   t->absolute ? "absolute" : "relative");
         }

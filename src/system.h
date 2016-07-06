@@ -1,5 +1,5 @@
 /* system-dependent definitions for coreutils
-   Copyright (C) 1989, 1991-2010 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,17 +14,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* Include this file _after_ system headers if possible.  */
+
 #include <alloca.h>
 
-/* Include sys/types.h before this file.  */
-
-#if 2 <= __GLIBC__ && 2 <= __GLIBC_MINOR__
-# if ! defined _SYS_TYPES_H
-you must include <sys/types.h> before including this file
-# endif
-#endif
-
 #include <sys/stat.h>
+
+/* Commonly used file permission combination.  */
+#define MODE_RW_UGO (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 #if !defined HAVE_MKFIFO
 # define mkfifo(name, mode) mknod (name, (mode) | S_IFIFO, 0)
@@ -36,18 +33,19 @@ you must include <sys/types.h> before including this file
 
 #include <unistd.h>
 
-/* limits.h must come before pathmax.h because limits.h on some systems
-   undefs PATH_MAX, whereas pathmax.h sets PATH_MAX.  */
 #include <limits.h>
 
 #include "pathmax.h"
+#ifndef PATH_MAX
+# define PATH_MAX 8192
+#endif
 
 #include "configmake.h"
 
 #include <sys/time.h>
 #include <time.h>
 
-/* Since major is a function on SVR4, we can't use `ifndef major'.  */
+/* Since major is a function on SVR4, we can't use 'ifndef major'.  */
 #if MAJOR_IN_MKDEV
 # include <sys/mkdev.h>
 # define HAVE_MAJOR
@@ -71,15 +69,12 @@ you must include <sys/types.h> before including this file
 # define makedev(maj, min)  mkdev (maj, min)
 #endif
 
-/* Don't use bcopy!  Use memmove if source and destination may overlap,
-   memcpy otherwise.  */
-
 #include <string.h>
-
 #include <errno.h>
 
 /* Some systems don't define this; POSIX mentions it but says it is
-   obsolete, so gnulib does not provide it either.  */
+   obsolete.  gnulib defines it, but only on native Windows systems,
+   and there only because MSVC 10 does.  */
 #ifndef ENODATA
 # define ENODATA (-1)
 #endif
@@ -129,81 +124,15 @@ enum
 /* include here for SIZE_MAX.  */
 #include <inttypes.h>
 
-/* Get or fake the disk device blocksize.
-   Usually defined by sys/param.h (if at all).  */
-#if !defined DEV_BSIZE && defined BSIZE
-# define DEV_BSIZE BSIZE
-#endif
-#if !defined DEV_BSIZE && defined BBSIZE /* SGI */
-# define DEV_BSIZE BBSIZE
-#endif
-#ifndef DEV_BSIZE
-# define DEV_BSIZE 4096
-#endif
-
-/* Extract or fake data from a `struct stat'.
-   ST_BLKSIZE: Preferred I/O blocksize for the file, in bytes.
-   ST_NBLOCKS: Number of blocks in the file, including indirect blocks.
-   ST_NBLOCKSIZE: Size of blocks used when calculating ST_NBLOCKS.  */
-#ifndef HAVE_STRUCT_STAT_ST_BLOCKS
-# define ST_BLKSIZE(statbuf) DEV_BSIZE
-# if defined _POSIX_SOURCE || !defined BSIZE /* fileblocks.c uses BSIZE.  */
-#  define ST_NBLOCKS(statbuf) \
-  ((statbuf).st_size / ST_NBLOCKSIZE + ((statbuf).st_size % ST_NBLOCKSIZE != 0))
-# else /* !_POSIX_SOURCE && BSIZE */
-#  define ST_NBLOCKS(statbuf) \
-  (S_ISREG ((statbuf).st_mode) \
-   || S_ISDIR ((statbuf).st_mode) \
-   ? st_blocks ((statbuf).st_size) : 0)
-# endif /* !_POSIX_SOURCE && BSIZE */
-#else /* HAVE_STRUCT_STAT_ST_BLOCKS */
-/* Some systems, like Sequents, return st_blksize of 0 on pipes.
-   Also, when running `rsh hpux11-system cat any-file', cat would
-   determine that the output stream had an st_blksize of 2147421096.
-   Conversely st_blksize can be 2 GiB (or maybe even larger) with XFS
-   on 64-bit hosts.  Somewhat arbitrarily, limit the `optimal' block
-   size to SIZE_MAX / 8 + 1.  (Dividing SIZE_MAX by only 4 wouldn't
-   suffice, since "cat" sometimes multiplies the result by 4.)  If
-   anyone knows of a system for which this limit is too small, please
-   report it as a bug in this code.  */
-# define ST_BLKSIZE(statbuf) ((0 < (statbuf).st_blksize \
-                               && (statbuf).st_blksize <= SIZE_MAX / 8 + 1) \
-                              ? (statbuf).st_blksize : DEV_BSIZE)
-# if defined hpux || defined __hpux__ || defined __hpux
-/* HP-UX counts st_blocks in 1024-byte units.
-   This loses when mixing HP-UX and BSD file systems with NFS.  */
-#  define ST_NBLOCKSIZE 1024
-# else /* !hpux */
-#  if defined _AIX && defined _I386
-/* AIX PS/2 counts st_blocks in 4K units.  */
-#   define ST_NBLOCKSIZE (4 * 1024)
-#  else /* not AIX PS/2 */
-#   if defined _CRAY
-#    define ST_NBLOCKS(statbuf) \
-  (S_ISREG ((statbuf).st_mode) \
-   || S_ISDIR ((statbuf).st_mode) \
-   ? (statbuf).st_blocks * ST_BLKSIZE (statbuf) / ST_NBLOCKSIZE : 0)
-#   endif /* _CRAY */
-#  endif /* not AIX PS/2 */
-# endif /* !hpux */
-#endif /* HAVE_STRUCT_STAT_ST_BLOCKS */
-
-#ifndef ST_NBLOCKS
-# define ST_NBLOCKS(statbuf) ((statbuf).st_blocks)
-#endif
-
-#ifndef ST_NBLOCKSIZE
-# ifdef S_BLKSIZE
-#  define ST_NBLOCKSIZE S_BLKSIZE
-# else
-#  define ST_NBLOCKSIZE 512
-# endif
-#endif
-
 /* Redirection and wildcarding when done by the utility itself.
-   Generally a noop, but used in particular for native VMS. */
+   Generally a noop, but used in particular for OS/2.  */
 #ifndef initialize_main
-# define initialize_main(ac, av)
+# ifndef __OS2__
+#  define initialize_main(ac, av)
+# else
+#  define initialize_main(ac, av) \
+     do { _wildcard (ac, av); _response (ac, av); } while (0)
+# endif
 #endif
 
 #include "stat-macros.h"
@@ -218,13 +147,20 @@ enum
    - It's typically faster.
    POSIX says that only '0' through '9' are digits.  Prefer ISDIGIT to
    isdigit unless it's important to use the locale's definition
-   of `digit' even when the host does not conform to POSIX.  */
+   of 'digit' even when the host does not conform to POSIX.  */
 #define ISDIGIT(c) ((unsigned int) (c) - '0' <= 9)
 
 /* Convert a possibly-signed character to an unsigned character.  This is
    a bit safer than casting to unsigned char, since it catches some type
    errors that the cast doesn't.  */
 static inline unsigned char to_uchar (char ch) { return ch; }
+
+/* '\n' is considered a field separator with  --zero-terminated.  */
+static inline bool
+field_sep (unsigned char ch)
+{
+  return isblank (ch) || ch == '\n';
+}
 
 #include <locale.h>
 
@@ -253,6 +189,12 @@ select_plural (uintmax_t n)
 }
 
 #define STREQ(a, b) (strcmp (a, b) == 0)
+#define STREQ_LEN(a, b, n) (strncmp (a, b, n) == 0)
+#define STRPREFIX(a, b) (strncmp (a, b, strlen (b)) == 0)
+
+/* Just like strncmp, but the second argument must be a literal string
+   and you don't specify the length;  that comes from the literal.  */
+#define STRNCMP_LIT(s, lit) strncmp (s, "" lit "", sizeof (lit) - 1)
 
 #if !HAVE_DECL_GETLOGIN
 char *getlogin ();
@@ -274,6 +216,24 @@ struct passwd *getpwuid ();
 struct group *getgrgid ();
 #endif
 
+/* Interix has replacements for getgr{gid,nam,ent}, that don't
+   query the domain controller for group members when not required.
+   This speeds up the calls tremendously (<1 ms vs. >3 s). */
+/* To protect any system that could provide _nomembers functions
+   other than interix, check for HAVE_SETGROUPS, as interix is
+   one of the very few (the only?) platform that lacks it */
+#if ! HAVE_SETGROUPS
+# if HAVE_GETGRGID_NOMEMBERS
+#  define getgrgid(gid) getgrgid_nomembers(gid)
+# endif
+# if HAVE_GETGRNAM_NOMEMBERS
+#  define getgrnam(nam) getgrnam_nomembers(nam)
+# endif
+# if HAVE_GETGRENT_NOMEMBERS
+#  define getgrent() getgrent_nomembers()
+# endif
+#endif
+
 #if !HAVE_DECL_GETUID
 uid_t getuid ();
 #endif
@@ -282,7 +242,7 @@ uid_t getuid ();
 #include "verify.h"
 
 /* This is simply a shorthand for the common case in which
-   the third argument to x2nrealloc would be `sizeof *(P)'.
+   the third argument to x2nrealloc would be 'sizeof *(P)'.
    Ensure that sizeof *(P) is *not* 1.  In that case, it'd be
    better to use X2REALLOC, although not strictly necessary.  */
 #define X2NREALLOC(P, PN) ((void) verify_true (sizeof *(P) != 1), \
@@ -313,7 +273,7 @@ dot_or_dotdot (char const *file_name)
     return false;
 }
 
-/* A wrapper for readdir so that callers don't see entries for `.' or `..'.  */
+/* A wrapper for readdir so that callers don't see entries for '.' or '..'.  */
 static inline struct dirent const *
 readdir_ignoring_dot_and_dotdot (DIR *dirp)
 {
@@ -371,7 +331,7 @@ enum
 #define GETOPT_VERSION_OPTION_DECL \
   "version", no_argument, NULL, GETOPT_VERSION_CHAR
 #define GETOPT_SELINUX_CONTEXT_OPTION_DECL \
-  "context", required_argument, NULL, 'Z'
+  "context", optional_argument, NULL, 'Z'
 
 #define case_GETOPT_HELP_CHAR			\
   case GETOPT_HELP_CHAR:			\
@@ -449,24 +409,11 @@ enum
 # define PID_T_MAX TYPE_MAXIMUM (pid_t)
 #endif
 
-/* Use this to suppress gcc's `...may be used before initialized' warnings. */
+/* Use this to suppress gcc's '...may be used before initialized' warnings. */
 #ifdef lint
 # define IF_LINT(Code) Code
 #else
 # define IF_LINT(Code) /* empty */
-#endif
-
-/* With -Dlint, avoid warnings from gcc about code like mbstate_t m = {0,};
-   by wasting space on a static variable of the same type, that is thus
-   guaranteed to be initialized to 0, and use that on the RHS.  */
-#define DZA_CONCAT0(x,y) x ## y
-#define DZA_CONCAT(x,y) DZA_CONCAT0 (x, y)
-#ifdef lint
-# define DECLARE_ZEROED_AGGREGATE(Type, Var) \
-   static Type DZA_CONCAT (s0_, __LINE__); Type Var = DZA_CONCAT (s0_, __LINE__)
-#else
-# define DECLARE_ZEROED_AGGREGATE(Type, Var) \
-  Type Var = { 0, }
 #endif
 
 #ifndef __attribute__
@@ -479,10 +426,6 @@ enum
 # define ATTRIBUTE_NORETURN __attribute__ ((__noreturn__))
 #endif
 
-#ifndef ATTRIBUTE_UNUSED
-# define ATTRIBUTE_UNUSED __attribute__ ((__unused__))
-#endif
-
 /* The warn_unused_result attribute appeared first in gcc-3.4.0 */
 #undef ATTRIBUTE_WARN_UNUSED_RESULT
 #if __GNUC__ < 3 || (__GNUC__ == 3 && __GNUC_MINOR__ < 4)
@@ -490,6 +433,15 @@ enum
 #else
 # define ATTRIBUTE_WARN_UNUSED_RESULT __attribute__ ((__warn_unused_result__))
 #endif
+
+#ifdef __GNUC__
+# define LIKELY(cond)    __builtin_expect ((cond), 1)
+# define UNLIKELY(cond)  __builtin_expect ((cond), 0)
+#else
+# define LIKELY(cond)    (cond)
+# define UNLIKELY(cond)  (cond)
+#endif
+
 
 #if defined strdupa
 # define ASSIGN_STRDUPA(DEST, S)		\
@@ -513,7 +465,7 @@ enum
 /* Compute the greatest common divisor of U and V using Euclid's
    algorithm.  U and V must be nonzero.  */
 
-static inline size_t
+static inline size_t _GL_ATTRIBUTE_CONST
 gcd (size_t u, size_t v)
 {
   do
@@ -531,7 +483,7 @@ gcd (size_t u, size_t v)
    nonzero.  There is no overflow checking, so callers should not
    specify outlandish sizes.  */
 
-static inline size_t
+static inline size_t _GL_ATTRIBUTE_CONST
 lcm (size_t u, size_t v)
 {
   return u * (v / gcd (u, v));
@@ -548,6 +500,57 @@ ptr_align (void const *ptr, size_t alignment)
   char const *p0 = ptr;
   char const *p1 = p0 + alignment - 1;
   return (void *) (p1 - (size_t) p1 % alignment);
+}
+
+/* Return whether the buffer consists entirely of NULs.
+   Based on memeqzero in CCAN by Rusty Russell under CC0 (Public domain).  */
+
+static inline bool _GL_ATTRIBUTE_PURE
+is_nul (void const *buf, size_t length)
+{
+  const unsigned char *p = buf;
+/* Using possibly unaligned access for the first 16 bytes
+   saves about 30-40 cycles, though it is strictly undefined behavior
+   and so would need __attribute__ ((__no_sanitize_undefined__))
+   to avoid -fsanitize=undefined warnings.
+   Considering coreutils is mainly concerned with relatively
+   large buffers, we'll just use the defined behavior.  */
+#if 0 && _STRING_ARCH_unaligned
+  unsigned long word;
+#else
+  unsigned char word;
+#endif
+
+  if (! length)
+      return true;
+
+  /* Check len bytes not aligned on a word.  */
+  while (UNLIKELY (length & (sizeof word - 1)))
+    {
+      if (*p)
+        return false;
+      p++;
+      length--;
+      if (! length)
+        return true;
+   }
+
+  /* Check up to 16 bytes a word at a time.  */
+  for (;;)
+    {
+      memcpy (&word, p, sizeof word);
+      if (word)
+        return false;
+      p += sizeof word;
+      length -= sizeof word;
+      if (! length)
+        return true;
+      if (UNLIKELY (length & 15) == 0)
+        break;
+   }
+
+   /* Now we know first 16 bytes are NUL, memcmp with self.  */
+   return memcmp (buf, p, length) == 0;
 }
 
 /* If 10*Accum + Digit_val is larger than the maximum value for Type,
@@ -572,11 +575,26 @@ ptr_align (void const *ptr, size_t alignment)
   )
 
 static inline void
+emit_stdin_note (void)
+{
+  fputs (_("\n\
+With no FILE, or when FILE is -, read standard input.\n\
+"), stdout);
+}
+static inline void
+emit_mandatory_arg_note (void)
+{
+  fputs (_("\n\
+Mandatory arguments to long options are mandatory for short options too.\n\
+"), stdout);
+}
+
+static inline void
 emit_size_note (void)
 {
   fputs (_("\n\
-SIZE may be (or may be an integer optionally followed by) one of following:\n\
-KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n\
+The SIZE argument is an integer and optional unit (example: 10K is 10*1024).\n\
+Units are K,M,G,T,P,E,Z,Y (powers of 1024) or KB,MB,... (powers of 1000).\n\
 "), stdout);
 }
 
@@ -591,30 +609,51 @@ Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\
 }
 
 static inline void
-emit_ancillary_info (void)
+emit_ancillary_info (char const *program)
 {
-  printf (_("\nReport %s bugs to %s\n"), last_component (program_name),
-          PACKAGE_BUGREPORT);
-  /* FIXME 2010: use AC_PACKAGE_URL once we require autoconf-2.64 */
-  printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
-          PACKAGE_NAME, PACKAGE);
-  fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-         stdout);
+  struct infomap { char const *program; char const *node; } const infomap[] = {
+    { "[", "test invocation" },
+    { "coreutils", "Multi-call invocation" },
+    { "sha224sum", "sha2 utilities" },
+    { "sha256sum", "sha2 utilities" },
+    { "sha384sum", "sha2 utilities" },
+    { "sha512sum", "sha2 utilities" },
+    { NULL, NULL }
+  };
+
+  char const *node = program;
+  struct infomap const *map_prog = infomap;
+
+  while (map_prog->program && ! STREQ (program, map_prog->program))
+    map_prog++;
+
+  if (map_prog->node)
+    node = map_prog->node;
+
+  printf (_("\n%s online help: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
+
   /* Don't output this redundant message for English locales.
      Note we still output for 'C' so that it gets included in the man page.  */
   const char *lc_messages = setlocale (LC_MESSAGES, NULL);
-  if (lc_messages && strncmp (lc_messages, "en_", 3))
+  if (lc_messages && STRNCMP_LIT (lc_messages, "en_"))
     {
       /* TRANSLATORS: Replace LANG_CODE in this URL with your language code
          <http://translationproject.org/team/LANG_CODE.html> to form one of
          the URLs at http://translationproject.org/team/.  Otherwise, replace
          the entire URL with your translation team's email address.  */
       printf (_("Report %s translation bugs to "
-                "<http://translationproject.org/team/>\n"),
-                last_component (program_name));
+                "<http://translationproject.org/team/>\n"), program);
     }
-  printf (_("For complete documentation, run: "
-            "info coreutils '%s invocation'\n"), last_component (program_name));
+  printf (_("Full documentation at: <%s%s>\n"),
+          PACKAGE_URL, program);
+  printf (_("or available locally via: info '(coreutils) %s%s'\n"),
+          node, node == program ? " invocation" : "");
+}
+
+static inline void
+emit_try_help (void)
+{
+  fprintf (stderr, _("Try '%s --help' for more information.\n"), program_name);
 }
 
 #include "inttostr.h"
@@ -633,52 +672,25 @@ bad_cast (char const *s)
   return (char *) s;
 }
 
-/* As of Mar 2009, 32KiB is determined to be the minimium
-   blksize to best minimize system call overhead.
-   This can be tested with this script with the results
-   shown for a 1.7GHz pentium-m with 2GB of 400MHz DDR2 RAM:
-
-   for i in $(seq 0 10); do
-     size=$((8*1024**3)) #ensure this is big enough
-     bs=$((1024*2**$i))
-     printf "%7s=" $bs
-     dd bs=$bs if=/dev/zero of=/dev/null count=$(($size/$bs)) 2>&1 |
-     sed -n 's/.* \([0-9.]* [GM]B\/s\)/\1/p'
-   done
-
-      1024=734 MB/s
-      2048=1.3 GB/s
-      4096=2.4 GB/s
-      8192=3.5 GB/s
-     16384=3.9 GB/s
-     32768=5.2 GB/s
-     65536=5.3 GB/s
-    131072=5.5 GB/s
-    262144=5.7 GB/s
-    524288=5.7 GB/s
-   1048576=5.8 GB/s
-
-   Note that this is to minimize system call overhead.
-   Other values may be appropriate to minimize file system
-   or disk overhead.  For example on my current GNU/Linux system
-   the readahead setting is 128KiB which was read using:
-
-   file="."
-   device=$(df -P --local "$file" | tail -n1 | cut -d' ' -f1)
-   echo $(( $(blockdev --getra $device) * 512 ))
-
-   However there isn't a portable way to get the above.
-   In the future we could use the above method if available
-   and default to io_blksize() if not.
- */
-enum { IO_BUFSIZE = 32*1024 };
-static inline size_t
-io_blksize (struct stat sb)
+/* Return a boolean indicating whether SB->st_size is defined.  */
+static inline bool
+usable_st_size (struct stat const *sb)
 {
-  return MAX (IO_BUFSIZE, ST_BLKSIZE (sb));
+  return (S_ISREG (sb->st_mode) || S_ISLNK (sb->st_mode)
+          || S_TYPEISSHM (sb) || S_TYPEISTMO (sb));
 }
 
 void usage (int status) ATTRIBUTE_NORETURN;
+
+/* Like error(0, 0, ...), but without an implicit newline.
+   Also a noop unless the global DEV_DEBUG is set.  */
+#define devmsg(...)			\
+  do					\
+    {					\
+      if (dev_debug)			\
+        fprintf (stderr, __VA_ARGS__);	\
+    }					\
+  while (0)
 
 #define emit_cycle_warning(file_name)	\
   do					\
@@ -688,10 +700,60 @@ WARNING: Circular directory structure.\n\
 This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
 The following directory is part of the cycle:\n  %s\n"), \
-             quote (file_name));	\
+             quotef (file_name));	\
     }					\
   while (0)
+
+/* Like stpncpy, but do ensure that the result is NUL-terminated,
+   and do not NUL-pad out to LEN.  I.e., when strnlen (src, len) == len,
+   this function writes a NUL byte into dest[len].  Thus, the length
+   of the destination buffer must be at least LEN + 1.
+   The DEST and SRC buffers must not overlap.  */
+static inline char *
+stzncpy (char *restrict dest, char const *restrict src, size_t len)
+{
+  char const *src_end = src + len;
+  while (src < src_end && *src)
+    *dest++ = *src++;
+  *dest = 0;
+  return dest;
+}
 
 #ifndef ARRAY_CARDINALITY
 # define ARRAY_CARDINALITY(Array) (sizeof (Array) / sizeof *(Array))
 #endif
+
+/* Avoid const warnings by casting to more portable type.
+   This is to cater for the incorrect const function declarations
+   in selinux.h before libselinux-2.3 (May 2014).
+   When version >= 2.3 is ubiquitous remove this function.  */
+static inline char * se_const (char const * sctx) { return (char *) sctx; }
+
+/* Return true if ERR is ENOTSUP or EOPNOTSUPP, otherwise false.
+   This wrapper function avoids the redundant 'or'd comparison on
+   systems like Linux for which they have the same value.  It also
+   avoids the gcc warning to that effect.  */
+static inline bool
+is_ENOTSUP (int err)
+{
+  return err == EOPNOTSUPP || (ENOTSUP != EOPNOTSUPP && err == ENOTSUP);
+}
+
+
+/* How coreutils quotes filenames, to minimize use of outer quotes,
+   but also provide better support for copy and paste when used.  */
+#include "quotearg.h"
+
+/* Use these to shell quote only when necessary,
+   when the quoted item is already delimited with colons.  */
+#define quotef(arg) \
+  quotearg_n_style_colon (0, shell_escape_quoting_style, arg)
+#define quotef_n(n, arg) \
+  quotearg_n_style_colon (n, shell_escape_quoting_style, arg)
+
+/* Use these when there are spaces around the file name,
+   in the error message.  */
+#define quoteaf(arg) \
+  quotearg_style (shell_escape_always_quoting_style, arg)
+#define quoteaf_n(n, arg) \
+  quotearg_n_style (n, shell_escape_always_quoting_style, arg)

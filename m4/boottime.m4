@@ -1,8 +1,7 @@
 # boottime.m4 serial 4
 # Determine whether this system has infrastructure for obtaining the boot time.
 
-# Copyright (C) 1996, 2000, 2002-2004, 2006, 2008-2010 Free Software
-# Foundation, Inc.
+# Copyright (C) 1996-2016 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,7 +51,9 @@ AC_DEFUN([GNULIB_BOOT_TIME],
 #endif
 ],
 [[
-#if defined BOOT_TIME || (defined CTL_KERN && defined KERN_BOOTTIME) || HAVE_OS_H
+#if (defined BOOT_TIME                              \
+     || (defined CTL_KERN && defined KERN_BOOTTIME) \
+     || HAVE_OS_H)
 /* your system *does* have the infrastructure to determine boot time */
 #else
 please_tell_us_how_to_determine_boot_time_on_your_system

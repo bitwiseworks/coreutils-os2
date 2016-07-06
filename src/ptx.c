@@ -1,5 +1,5 @@
 /* Permuted index for GNU, with keywords in their context.
-   Copyright (C) 1990-1991, 1993, 1998-2010 Free Software Foundation, Inc.
+   Copyright (C) 1990-2016 Free Software Foundation, Inc.
    François Pinard <pinard@iro.umontreal.ca>, 1988.
 
    This program is free software: you can redistribute it and/or modify
@@ -22,17 +22,17 @@
 #include <getopt.h>
 #include <sys/types.h>
 #include "system.h"
+#include <regex.h>
 #include "argmatch.h"
 #include "diacrit.h"
 #include "error.h"
 #include "fadvise.h"
 #include "quote.h"
-#include "quotearg.h"
-#include "regex.h"
+#include "read-file.h"
 #include "stdio--.h"
 #include "xstrtol.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "ptx"
 
 /* TRANSLATORS: Please translate "F. Pinard" to "François Pinard"
@@ -54,7 +54,7 @@
 # define MALLOC_FUNC_CHECK 1
 # include <dmalloc.h>
 #endif
-
+
 /* Global definitions.  */
 
 /* FIXME: There are many unchecked integer overflows in this file,
@@ -62,22 +62,18 @@
    options.  Many of the "int" values below should be "size_t" or
    something else like that.  */
 
-/* Reallocation step when swallowing non regular files.  The value is not
-   the actual reallocation step, but its base two logarithm.  */
-#define SWALLOW_REALLOC_LOG 12
-
 /* Program options.  */
 
 enum Format
 {
   UNKNOWN_FORMAT,		/* output format still unknown */
   DUMB_FORMAT,			/* output for a dumb terminal */
-  ROFF_FORMAT,			/* output for `troff' or `nroff' */
-  TEX_FORMAT			/* output for `TeX' or `LaTeX' */
+  ROFF_FORMAT,			/* output for 'troff' or 'nroff' */
+  TEX_FORMAT			/* output for 'TeX' or 'LaTeX' */
 };
 
 static bool gnu_extensions = true;	/* trigger all GNU extensions */
-static bool auto_reference = false;	/* refs are `file_name:line_number:' */
+static bool auto_reference = false;	/* refs are 'file_name:line_number:' */
 static bool input_reference = false;	/* refs at beginning of input lines */
 static bool right_reference = false;	/* output refs after right context  */
 static int line_width = 72;	/* output line width in characters */
@@ -89,9 +85,9 @@ static enum Format output_format = UNKNOWN_FORMAT;
                                 /* output format */
 
 static bool ignore_case = false;	/* fold lower to upper for sorting */
-static const char *break_file = NULL;	/* name of the `Break characters' file */
-static const char *only_file = NULL;	/* name of the `Only words' file */
-static const char *ignore_file = NULL;	/* name of the `Ignore words' file */
+static const char *break_file = NULL;	/* name of the 'Break chars' file */
+static const char *only_file = NULL;	/* name of the 'Only words' file */
+static const char *ignore_file = NULL;	/* name of the 'Ignore words' file */
 
 /* Options that use regular expressions.  */
 struct regex_data
@@ -167,9 +163,9 @@ static WORD_TABLE only_table;		/* table of words to select */
 static int number_input_files;	/* number of text input files */
 static int total_line_count;	/* total number of lines seen so far */
 static const char **input_file_name;	/* array of text input file names */
-static int *file_line_count;	/* array of `total_line_count' values at end */
+static int *file_line_count;	/* array of 'total_line_count' values at end */
 
-static BLOCK text_buffer;	/* file to study */
+static BLOCK *text_buffers;	/* files to study */
 
 /* SKIP_NON_WHITE used only for getting or skipping the reference.  */
 
@@ -202,14 +198,14 @@ static BLOCK text_buffer;	/* file to study */
 
 /* Occurrences table.
 
-   The `keyword' pointer provides the central word, which is surrounded
-   by a left context and a right context.  The `keyword' and `length'
+   The 'keyword' pointer provides the central word, which is surrounded
+   by a left context and a right context.  The 'keyword' and 'length'
    field allow full 8-bit characters keys, even including NULs.  At other
-   places in this program, the name `keyafter' refers to the keyword
+   places in this program, the name 'keyafter' refers to the keyword
    followed by its right context.
 
    The left context does not extend, towards the beginning of the file,
-   further than a distance given by the `left' value.  This value is
+   further than a distance given by the 'left' value.  This value is
    relative to the keyword beginning, it is usually negative.  This
    insures that, except for white space, we will never have to backward
    scan the source text, when it is time to generate the final output
@@ -217,12 +213,12 @@ static BLOCK text_buffer;	/* file to study */
 
    The right context, indirectly attainable through the keyword end, does
    not extend, towards the end of the file, further than a distance given
-   by the `right' value.  This value is relative to the keyword
+   by the 'right' value.  This value is relative to the keyword
    beginning, it is usually positive.
 
-   When automatic references are used, the `reference' value is the
+   When automatic references are used, the 'reference' value is the
    overall line number in all input files read so far, in this case, it
-   is of type (int).  When input references are used, the `reference'
+   is of type (int).  When input references are used, the 'reference'
    value indicates the distance between the keyword beginning and the
    start of the reference field, it is of type (DELTA) and usually
    negative.  */
@@ -235,6 +231,7 @@ typedef struct
     DELTA left;			/* distance to left context start */
     DELTA right;		/* distance to right context end */
     int reference;		/* reference descriptor */
+    size_t file_index;		/* corresponding file  */
   }
 OCCURS;
 
@@ -254,11 +251,11 @@ static char edited_flag[CHAR_SET_SIZE];
 static int half_line_width;	/* half of line width, reference excluded */
 static int before_max_width;	/* maximum width of before field */
 static int keyafter_max_width;	/* maximum width of keyword-and-after field */
-static int truncation_string_length;/* length of string used to flag truncation */
+static int truncation_string_length;/* length of string that flags truncation */
 
 /* When context is limited by lines, wraparound may happen on final output:
-   the `head' pointer gives access to some supplementary left context which
-   will be seen at the end of the output line, the `tail' pointer gives
+   the 'head' pointer gives access to some supplementary left context which
+   will be seen at the end of the output line, the 'tail' pointer gives
    access to some supplementary right context which will be seen at the
    beginning of the output line. */
 
@@ -275,7 +272,7 @@ static BLOCK head;		/* head field */
 static int head_truncation;	/* flag truncation before the head field */
 
 static BLOCK reference;		/* reference field for input reference mode */
-
+
 /* Miscellaneous routines.  */
 
 /* Diagnose an error in the regular expression matcher.  Then exit.  */
@@ -421,8 +418,8 @@ compile_regex (struct regex_data *regex)
   if (message)
     error (EXIT_FAILURE, 0, _("%s (for regexp %s)"), message, quote (string));
 
-  /* The fastmap should be compiled before `re_match'.  The following
-     call is not mandatory, because `re_search' is always called sooner,
+  /* The fastmap should be compiled before 're_match'.  The following
+     call is not mandatory, because 're_search' is always called sooner,
      and it compiles the fastmap if this has not been done yet.  */
 
   re_compile_fastmap (pattern);
@@ -511,90 +508,23 @@ initialize_regex (void)
 static void
 swallow_file_in_memory (const char *file_name, BLOCK *block)
 {
-  int file_handle;		/* file descriptor number */
-  struct stat stat_block;	/* stat block for file */
-  size_t allocated_length;	/* allocated length of memory buffer */
   size_t used_length;		/* used length in memory buffer */
-  int read_length;		/* number of character gotten on last read */
 
   /* As special cases, a file name which is NULL or "-" indicates standard
      input, which is already opened.  In all other cases, open the file from
      its name.  */
   bool using_stdin = !file_name || !*file_name || STREQ (file_name, "-");
   if (using_stdin)
-    file_handle = STDIN_FILENO;
+    block->start = fread_file (stdin, &used_length);
   else
-    if ((file_handle = open (file_name, O_RDONLY)) < 0)
-      error (EXIT_FAILURE, errno, "%s", file_name);
+    block->start = read_file (file_name, &used_length);
 
-  /* If the file is a plain, regular file, allocate the memory buffer all at
-     once and swallow the file in one blow.  In other cases, read the file
-     repeatedly in smaller chunks until we have it all, reallocating memory
-     once in a while, as we go.  */
+  if (!block->start)
+    error (EXIT_FAILURE, errno, "%s", quotef (using_stdin ? "-" : file_name));
 
-  if (fstat (file_handle, &stat_block) < 0)
-    error (EXIT_FAILURE, errno, "%s", file_name);
-
-  if (S_ISREG (stat_block.st_mode))
-    {
-      size_t in_memory_size;
-
-      fdadvise (file_handle, 0, 0, FADVISE_SEQUENTIAL);
-
-      block->start = xmalloc ((size_t) stat_block.st_size);
-
-      if ((in_memory_size = read (file_handle,
-                                  block->start, (size_t) stat_block.st_size))
-          != stat_block.st_size)
-        {
-#if MSDOS
-          /* On MSDOS, in memory size may be smaller than the file
-             size, because of end of line conversions.  But it can
-             never be smaller than half the file size, because the
-             minimum is when all lines are empty and terminated by
-             CR+LF.  */
-          if (in_memory_size != (size_t)-1
-              && in_memory_size >= stat_block.st_size / 2)
-            block->start = xrealloc (block->start, in_memory_size);
-          else
-#endif /* not MSDOS */
-
-            error (EXIT_FAILURE, errno, "%s", file_name);
-        }
-      block->end = block->start + in_memory_size;
-    }
-  else
-    {
-      block->start = xmalloc ((size_t) 1 << SWALLOW_REALLOC_LOG);
-      used_length = 0;
-      allocated_length = (1 << SWALLOW_REALLOC_LOG);
-
-      while (read_length = read (file_handle,
-                                 block->start + used_length,
-                                 allocated_length - used_length),
-             read_length > 0)
-        {
-          used_length += read_length;
-          if (used_length == allocated_length)
-            {
-              allocated_length += (1 << SWALLOW_REALLOC_LOG);
-              block->start
-                = xrealloc (block->start, allocated_length);
-            }
-        }
-
-      if (read_length < 0)
-        error (EXIT_FAILURE, errno, "%s", file_name);
-
-      block->end = block->start + used_length;
-    }
-
-  /* Close the file, but only if it was not the standard input.  */
-
-  if (! using_stdin && close (file_handle) != 0)
-    error (EXIT_FAILURE, errno, "%s", file_name);
+  block->end = block->start + used_length;
 }
-
+
 /* Sort and search routines.  */
 
 /*--------------------------------------------------------------------------.
@@ -665,7 +595,7 @@ compare_occurs (const void *void_first, const void *void_second)
 | Return !0 if WORD appears in TABLE.  Uses a binary search.  |
 `------------------------------------------------------------*/
 
-static int
+static int _GL_ATTRIBUTE_PURE
 search_table (WORD *word, WORD_TABLE *table)
 {
   int lowest;			/* current lowest possible index */
@@ -690,7 +620,7 @@ search_table (WORD *word, WORD_TABLE *table)
 }
 
 /*---------------------------------------------------------------------.
-| Sort the whole occurs table in memory.  Presumably, `qsort' does not |
+| Sort the whole occurs table in memory.  Presumably, 'qsort' does not |
 | take intermediate copies or table elements, so the sort will be      |
 | stabilized throughout the comparison routine.			       |
 `---------------------------------------------------------------------*/
@@ -700,11 +630,11 @@ sort_found_occurs (void)
 {
 
   /* Only one language for the time being.  */
-
-  qsort (occurs_table[0], number_of_occurs[0], sizeof **occurs_table,
-         compare_occurs);
+  if (number_of_occurs[0])
+    qsort (occurs_table[0], number_of_occurs[0], sizeof **occurs_table,
+           compare_occurs);
 }
-
+
 /* Parameter files reading routines.  */
 
 /*----------------------------------------------------------------------.
@@ -806,7 +736,7 @@ digest_word_file (const char *file_name, WORD_TABLE *table)
 
   qsort (table->start, table->length, sizeof table->start[0], compare_words);
 }
-
+
 /* Keyword recognition and selection.  */
 
 /*----------------------------------------------------------------------.
@@ -814,7 +744,7 @@ digest_word_file (const char *file_name, WORD_TABLE *table)
 `----------------------------------------------------------------------*/
 
 static void
-find_occurs_in_text (void)
+find_occurs_in_text (size_t file_index)
 {
   char *cursor;			/* for scanning the source text */
   char *scan;			/* for scanning the source text also */
@@ -830,7 +760,9 @@ find_occurs_in_text (void)
   char *word_end;		/* end of word */
   char *next_context_start;	/* next start of left context */
 
-  /* reference_length is always used within `if (input_reference)'.
+  const BLOCK *text_buffer = &text_buffers[file_index];
+
+  /* reference_length is always used within 'if (input_reference)'.
      However, GNU C diagnoses that it may be used uninitialized.  The
      following assignment is merely to shut it up.  */
 
@@ -845,41 +777,41 @@ find_occurs_in_text (void)
      found inside it.  Also, unconditionally assigning these variable has
      the happy effect of shutting up lint.  */
 
-  line_start = text_buffer.start;
+  line_start = text_buffer->start;
   line_scan = line_start;
   if (input_reference)
     {
-      SKIP_NON_WHITE (line_scan, text_buffer.end);
+      SKIP_NON_WHITE (line_scan, text_buffer->end);
       reference_length = line_scan - line_start;
-      SKIP_WHITE (line_scan, text_buffer.end);
+      SKIP_WHITE (line_scan, text_buffer->end);
     }
 
   /* Process the whole buffer, one line or one sentence at a time.  */
 
-  for (cursor = text_buffer.start;
-       cursor < text_buffer.end;
+  for (cursor = text_buffer->start;
+       cursor < text_buffer->end;
        cursor = next_context_start)
     {
 
-      /* `context_start' gets initialized before the processing of each
+      /* 'context_start' gets initialized before the processing of each
          line, or once for the whole buffer if no end of line or sentence
          sequence separator.  */
 
       context_start = cursor;
 
-      /* If a end of line or end of sentence sequence is defined and
-         non-empty, `next_context_start' will be recomputed to be the end of
+      /* If an end of line or end of sentence sequence is defined and
+         non-empty, 'next_context_start' will be recomputed to be the end of
          each line or sentence, before each one is processed.  If no such
-         sequence, then `next_context_start' is set at the end of the whole
+         sequence, then 'next_context_start' is set at the end of the whole
          buffer, which is then considered to be a single line or sentence.
          This test also accounts for the case of an incomplete line or
          sentence at the end of the buffer.  */
 
-      next_context_start = text_buffer.end;
+      next_context_start = text_buffer->end;
       if (context_regex.string)
         switch (re_search (&context_regex.pattern, cursor,
-                           text_buffer.end - cursor,
-                           0, text_buffer.end - cursor, &context_regs))
+                           text_buffer->end - cursor,
+                           0, text_buffer->end - cursor, &context_regs))
           {
           case -2:
             matcher_error ();
@@ -972,7 +904,7 @@ find_occurs_in_text (void)
           if (possible_key.size > maximum_word_length)
             maximum_word_length = possible_key.size;
 
-          /* In input reference mode, update `line_start' from its previous
+          /* In input reference mode, update 'line_start' from its previous
              value.  Count the lines just in case auto reference mode is
              also selected. If it happens that the word just matched is
              indeed part of a reference; just ignore it.  */
@@ -985,7 +917,7 @@ find_occurs_in_text (void)
                     total_line_count++;
                     line_scan++;
                     line_start = line_scan;
-                    SKIP_NON_WHITE (line_scan, text_buffer.end);
+                    SKIP_NON_WHITE (line_scan, text_buffer->end);
                     reference_length = line_scan - line_start;
                   }
                 else
@@ -994,8 +926,8 @@ find_occurs_in_text (void)
                 continue;
             }
 
-          /* Ignore the word if an `Ignore words' table exists and if it is
-             part of it.  Also ignore the word if an `Only words' table and
+          /* Ignore the word if an 'Ignore words' table exists and if it is
+             part of it.  Also ignore the word if an 'Only words' table and
              if it is *not* part of it.
 
              It is allowed that both tables be used at once, even if this
@@ -1019,20 +951,21 @@ find_occurs_in_text (void)
                   < occurs_alloc[0])
                 xalloc_die ();
               occurs_alloc[0] = occurs_alloc[0] * 2 + 1;
-              occurs_table[0] = xrealloc (occurs_table[0],
-                                          occurs_alloc[0] * sizeof *occurs_table[0]);
+              occurs_table[0] =
+                xrealloc (occurs_table[0],
+                          occurs_alloc[0] * sizeof *occurs_table[0]);
             }
 
           occurs_cursor = occurs_table[0] + number_of_occurs[0];
 
-          /* Define the refence field, if any.  */
+          /* Define the reference field, if any.  */
 
           if (auto_reference)
             {
 
-              /* While auto referencing, update `line_start' from its
+              /* While auto referencing, update 'line_start' from its
                  previous value, counting lines as we go.  If input
-                 referencing at the same time, `line_start' has been
+                 referencing at the same time, 'line_start' has been
                  advanced earlier, and the following loop is never really
                  executed.  */
 
@@ -1042,7 +975,7 @@ find_occurs_in_text (void)
                     total_line_count++;
                     line_scan++;
                     line_start = line_scan;
-                    SKIP_NON_WHITE (line_scan, text_buffer.end);
+                    SKIP_NON_WHITE (line_scan, text_buffer->end);
                   }
                 else
                   line_scan++;
@@ -1052,10 +985,10 @@ find_occurs_in_text (void)
           else if (input_reference)
             {
 
-              /* If only input referencing, `line_start' has been computed
+              /* If only input referencing, 'line_start' has been computed
                  earlier to detect the case the word matched would be part
                  of the reference.  The reference position is simply the
-                 value of `line_start'.  */
+                 value of 'line_start'.  */
 
               occurs_cursor->reference
                 = (DELTA) (line_start - possible_key.start);
@@ -1076,12 +1009,13 @@ find_occurs_in_text (void)
           occurs_cursor->key = possible_key;
           occurs_cursor->left = context_start - possible_key.start;
           occurs_cursor->right = context_end - possible_key.start;
+          occurs_cursor->file_index = file_index;
 
           number_of_occurs[0]++;
         }
     }
 }
-
+
 /* Formatting and actual output - service routines.  */
 
 /*-----------------------------------------.
@@ -1120,7 +1054,7 @@ print_field (BLOCK field)
           /* First check if this is a diacriticized character.
 
              This works only for TeX.  I do not know how diacriticized
-             letters work with `roff'.  Please someone explain it to me!  */
+             letters work with 'roff'.  Please someone explain it to me!  */
 
           diacritic = todiac (character);
           if (diacritic != 0 && output_format == TEX_FORMAT)
@@ -1158,7 +1092,7 @@ print_field (BLOCK field)
                   break;
 
                 case 3:		/* Grave accent */
-                  printf ("\\`%s%c", (base == 'i' ? "\\" : ""), base);
+                  printf ("\\'%s%c", (base == 'i' ? "\\" : ""), base);
                   break;
 
                 case 4:		/* Circumflex accent */
@@ -1213,7 +1147,7 @@ print_field (BLOCK field)
           else
 
             /* This is not a diacritic character, so handle cases which are
-               really specific to `roff' or TeX.  All white space processing
+               really specific to 'roff' or TeX.  All white space processing
                is done as the default case of this switch.  */
 
             switch (character)
@@ -1255,7 +1189,7 @@ print_field (BLOCK field)
         putchar (*cursor);
     }
 }
-
+
 /* Formatting and actual output - planning routines.  */
 
 /*--------------------------------------------------------------------.
@@ -1390,7 +1324,7 @@ fix_output_parameters (void)
 
     case ROFF_FORMAT:
 
-      /* `Quote' characters should be doubled.  */
+      /* 'Quote' characters should be doubled.  */
 
       edited_flag['"'] = 1;
       break;
@@ -1424,21 +1358,25 @@ define_all_fields (OCCURS *occurs)
   char *cursor;			/* running cursor in source text */
   char *left_context_start;	/* start of left context */
   char *right_context_end;	/* end of right context */
-  char *left_field_start;	/* conservative start for `head'/`before' */
-  int file_index;		/* index in text input file arrays */
+  char *left_field_start;	/* conservative start for 'head'/'before' */
   const char *file_name;	/* file name for reference */
   int line_ordinal;		/* line ordinal for reference */
+  const char *buffer_start;	/* start of buffered file for this occurs */
+  const char *buffer_end;	/* end of buffered file for this occurs */
 
-  /* Define `keyafter', start of left context and end of right context.
-     `keyafter' starts at the saved position for keyword and extend to the
+  /* Define 'keyafter', start of left context and end of right context.
+     'keyafter' starts at the saved position for keyword and extend to the
      right from the end of the keyword, eating separators or full words, but
-     not beyond maximum allowed width for `keyafter' field or limit for the
+     not beyond maximum allowed width for 'keyafter' field or limit for the
      right context.  Suffix spaces will be removed afterwards.  */
 
   keyafter.start = occurs->key.start;
   keyafter.end = keyafter.start + occurs->key.size;
   left_context_start = keyafter.start + occurs->left;
   right_context_end = keyafter.start + occurs->right;
+
+  buffer_start = text_buffers[occurs->file_index].start;
+  buffer_end = text_buffers[occurs->file_index].end;
 
   cursor = keyafter.end;
   while (cursor < right_context_end
@@ -1455,7 +1393,7 @@ define_all_fields (OCCURS *occurs)
   SKIP_WHITE_BACKWARDS (keyafter.end, keyafter.start);
 
   /* When the left context is wide, it might take some time to catch up from
-     the left context boundary to the beginning of the `head' or `before'
+     the left context boundary to the beginning of the 'head' or 'before'
      fields.  So, in this case, to speed the catchup, we jump back from the
      keyword, using some secure distance, possibly falling in the middle of
      a word.  A secure backward jump would be at least half the maximum
@@ -1463,7 +1401,7 @@ define_all_fields (OCCURS *occurs)
      input.  We conclude this backward jump by a skip forward of at least
      one word.  In this manner, we should not inadvertently accept only part
      of a word.  From the reached point, when it will be time to fix the
-     beginning of `head' or `before' fields, we will skip forward words or
+     beginning of 'head' or 'before' fields, we will skip forward words or
      delimiters until we get sufficiently near.  */
 
   if (-occurs->left > half_line_width + maximum_word_length)
@@ -1475,10 +1413,10 @@ define_all_fields (OCCURS *occurs)
   else
     left_field_start = keyafter.start + occurs->left;
 
-  /* `before' certainly ends at the keyword, but not including separating
+  /* 'before' certainly ends at the keyword, but not including separating
      spaces.  It starts after than the saved value for the left context, by
      advancing it until it falls inside the maximum allowed width for the
-     before field.  There will be no prefix spaces either.  `before' only
+     before field.  There will be no prefix spaces either.  'before' only
      advances by skipping single separators or whole words. */
 
   before.start = left_field_start;
@@ -1491,13 +1429,13 @@ define_all_fields (OCCURS *occurs)
   if (truncation_string)
     {
       cursor = before.start;
-      SKIP_WHITE_BACKWARDS (cursor, text_buffer.start);
+      SKIP_WHITE_BACKWARDS (cursor, buffer_start);
       before_truncation = cursor > left_context_start;
     }
   else
     before_truncation = 0;
 
-  SKIP_WHITE (before.start, text_buffer.end);
+  SKIP_WHITE (before.start, buffer_end);
 
   /* The tail could not take more columns than what has been left in the
      left context field, and a gap is mandatory.  It starts after the
@@ -1512,7 +1450,7 @@ define_all_fields (OCCURS *occurs)
   if (tail_max_width > 0)
     {
       tail.start = keyafter.end;
-      SKIP_WHITE (tail.start, text_buffer.end);
+      SKIP_WHITE (tail.start, buffer_end);
 
       tail.end = tail.start;
       cursor = tail.end;
@@ -1546,7 +1484,7 @@ define_all_fields (OCCURS *occurs)
       tail_truncation = 0;
     }
 
-  /* `head' could not take more columns than what has been left in the right
+  /* 'head' could not take more columns than what has been left in the right
      context field, and a gap is mandatory.  It ends before the left
      context, and does not contain suffixed spaces.  Its pointer is advanced
      until the head field has shrunk to its allowed width.  It cannot
@@ -1558,7 +1496,7 @@ define_all_fields (OCCURS *occurs)
   if (head_max_width > 0)
     {
       head.end = before.start;
-      SKIP_WHITE_BACKWARDS (head.end, text_buffer.start);
+      SKIP_WHITE_BACKWARDS (head.end, buffer_start);
 
       head.start = left_field_start;
       while (head.start + head_max_width < head.end)
@@ -1589,21 +1527,16 @@ define_all_fields (OCCURS *occurs)
     {
 
       /* Construct the reference text in preallocated space from the file
-         name and the line number.  Find out in which file the reference
-         occurred.  Standard input yields an empty file name.  Insure line
-         numbers are one based, even if they are computed zero based.  */
+         name and the line number.  Standard input yields an empty file name.
+         Ensure line numbers are 1 based, even if they are computed 0 based.  */
 
-      file_index = 0;
-      while (file_line_count[file_index] < occurs->reference)
-        file_index++;
-
-      file_name = input_file_name[file_index];
+      file_name = input_file_name[occurs->file_index];
       if (!file_name)
         file_name = "";
 
       line_ordinal = occurs->reference + 1;
-      if (file_index > 0)
-        line_ordinal -= file_line_count[file_index - 1];
+      if (occurs->file_index > 0)
+        line_ordinal -= file_line_count[occurs->file_index - 1];
 
       sprintf (reference.start, "%s:%d", file_name, line_ordinal);
       reference.end = reference.start + strlen (reference.start);
@@ -1619,17 +1552,17 @@ define_all_fields (OCCURS *occurs)
       SKIP_NON_WHITE (reference.end, right_context_end);
     }
 }
-
+
 /* Formatting and actual output - control routines.  */
 
 /*----------------------------------------------------------------------.
-| Output the current output fields as one line for `troff' or `nroff'.  |
+| Output the current output fields as one line for 'troff' or 'nroff'.  |
 `----------------------------------------------------------------------*/
 
 static void
 output_one_roff_line (void)
 {
-  /* Output the `tail' field.  */
+  /* Output the 'tail' field.  */
 
   printf (".%s \"", macro_name);
   print_field (tail);
@@ -1637,7 +1570,7 @@ output_one_roff_line (void)
     fputs (truncation_string, stdout);
   putchar ('"');
 
-  /* Output the `before' field.  */
+  /* Output the 'before' field.  */
 
   fputs (" \"", stdout);
   if (before_truncation)
@@ -1645,7 +1578,7 @@ output_one_roff_line (void)
   print_field (before);
   putchar ('"');
 
-  /* Output the `keyafter' field.  */
+  /* Output the 'keyafter' field.  */
 
   fputs (" \"", stdout);
   print_field (keyafter);
@@ -1653,7 +1586,7 @@ output_one_roff_line (void)
     fputs (truncation_string, stdout);
   putchar ('"');
 
-  /* Output the `head' field.  */
+  /* Output the 'head' field.  */
 
   fputs (" \"", stdout);
   if (head_truncation)
@@ -1661,7 +1594,7 @@ output_one_roff_line (void)
   print_field (head);
   putchar ('"');
 
-  /* Conditionally output the `reference' field.  */
+  /* Conditionally output the 'reference' field.  */
 
   if (auto_reference || input_reference)
     {
@@ -1674,7 +1607,7 @@ output_one_roff_line (void)
 }
 
 /*---------------------------------------------------------.
-| Output the current output fields as one line for `TeX'.  |
+| Output the current output fields as one line for 'TeX'.  |
 `---------------------------------------------------------*/
 
 static void
@@ -1723,7 +1656,7 @@ output_one_dumb_line (void)
       if (auto_reference)
         {
 
-          /* Output the `reference' field, in such a way that GNU emacs
+          /* Output the 'reference' field, in such a way that GNU emacs
              next-error will handle it.  The ending colon is taken from the
              gap which follows.  */
 
@@ -1737,7 +1670,7 @@ output_one_dumb_line (void)
       else
         {
 
-          /* Output the `reference' field and its following gap.  */
+          /* Output the 'reference' field and its following gap.  */
 
           print_field (reference);
           print_spaces (reference_max_width
@@ -1748,7 +1681,7 @@ output_one_dumb_line (void)
 
   if (tail.start < tail.end)
     {
-      /* Output the `tail' field.  */
+      /* Output the 'tail' field.  */
 
       print_field (tail);
       if (tail_truncation)
@@ -1765,7 +1698,7 @@ output_one_dumb_line (void)
                   - (before.end - before.start)
                   - (before_truncation ? truncation_string_length : 0));
 
-  /* Output the `before' field.  */
+  /* Output the 'before' field.  */
 
   if (before_truncation)
     fputs (truncation_string, stdout);
@@ -1773,7 +1706,7 @@ output_one_dumb_line (void)
 
   print_spaces (gap_size);
 
-  /* Output the `keyafter' field.  */
+  /* Output the 'keyafter' field.  */
 
   print_field (keyafter);
   if (keyafter_truncation)
@@ -1781,7 +1714,7 @@ output_one_dumb_line (void)
 
   if (head.start < head.end)
     {
-      /* Output the `head' field.  */
+      /* Output the 'head' field.  */
 
       print_spaces (half_line_width
                     - (keyafter.end - keyafter.start)
@@ -1801,7 +1734,7 @@ output_one_dumb_line (void)
 
   if ((auto_reference || input_reference) && right_reference)
     {
-      /* Output the `reference' field.  */
+      /* Output the 'reference' field.  */
 
       print_spaces (gap_size);
       print_field (reference);
@@ -1869,7 +1802,7 @@ generate_all_output (void)
       occurs_cursor++;
     }
 }
-
+
 /* Option decoding and main program.  */
 
 /*------------------------------------------------------.
@@ -1880,8 +1813,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -1890,18 +1822,21 @@ Usage: %s [OPTION]... [INPUT]...   (without -G)\n\
               program_name, program_name);
       fputs (_("\
 Output a permuted index, including context, of the words in the input files.\n\
-\n\
 "), stdout);
-      fputs (_("\
-Mandatory arguments to long options are mandatory for short options too.\n\
-"), stdout);
+
+      emit_stdin_note ();
+      emit_mandatory_arg_note ();
+
       fputs (_("\
   -A, --auto-reference           output automatically generated references\n\
-  -G, --traditional              behave more like System V `ptx'\n\
-  -F, --flag-truncation=STRING   use STRING for flagging line truncations\n\
+  -G, --traditional              behave more like System V 'ptx'\n\
 "), stdout);
       fputs (_("\
-  -M, --macro-name=STRING        macro name to use instead of `xx'\n\
+  -F, --flag-truncation=STRING   use STRING for flagging line truncations.\n\
+                                 The default is '/'\n\
+"), stdout);
+      fputs (_("\
+  -M, --macro-name=STRING        macro name to use instead of 'xx'\n\
   -O, --format=roff              generate output as roff directives\n\
   -R, --right-side-refs          put references at right, not counted in -w\n\
   -S, --sentence-regexp=REGEXP   for end of lines or end of sentences\n\
@@ -1922,11 +1857,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      fputs (_("\
-\n\
-With no FILE or if FILE is -, read Standard Input.  `-F /' by default.\n\
-"), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -2017,7 +1948,7 @@ main (int argc, char **argv)
             if (xstrtoul (optarg, NULL, 0, &tmp_ulong, NULL) != LONGINT_OK
                 || ! (0 < tmp_ulong && tmp_ulong <= INT_MAX))
               error (EXIT_FAILURE, 0, _("invalid gap width: %s"),
-                     quotearg (optarg));
+                     quote (optarg));
             gap_size = tmp_ulong;
             break;
           }
@@ -2044,7 +1975,7 @@ main (int argc, char **argv)
             if (xstrtoul (optarg, NULL, 0, &tmp_ulong, NULL) != LONGINT_OK
                 || ! (0 < tmp_ulong && tmp_ulong <= INT_MAX))
               error (EXIT_FAILURE, 0, _("invalid line width: %s"),
-                     quotearg (optarg));
+                     quote (optarg));
             line_width = tmp_ulong;
             break;
           }
@@ -2086,6 +2017,8 @@ main (int argc, char **argv)
         case 10:
           output_format = XARGMATCH ("--format", optarg,
                                      format_args, format_vals);
+          break;
+
         case_GETOPT_HELP_CHAR;
 
         case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
@@ -2103,6 +2036,7 @@ main (int argc, char **argv)
 
       input_file_name = xmalloc (sizeof *input_file_name);
       file_line_count = xmalloc (sizeof *file_line_count);
+      text_buffers =    xmalloc (sizeof *text_buffers);
       number_input_files = 1;
       input_file_name[0] = NULL;
     }
@@ -2111,6 +2045,7 @@ main (int argc, char **argv)
       number_input_files = argc - optind;
       input_file_name = xmalloc (number_input_files * sizeof *input_file_name);
       file_line_count = xmalloc (number_input_files * sizeof *file_line_count);
+      text_buffers    = xmalloc (number_input_files * sizeof *text_buffers);
 
       for (file_index = 0; file_index < number_input_files; file_index++)
         {
@@ -2129,6 +2064,7 @@ main (int argc, char **argv)
       number_input_files = 1;
       input_file_name = xmalloc (sizeof *input_file_name);
       file_line_count = xmalloc (sizeof *file_line_count);
+      text_buffers    = xmalloc (sizeof *text_buffers);
       if (!*argv[optind] || STREQ (argv[optind], "-"))
         input_file_name[0] = NULL;
       else
@@ -2140,7 +2076,7 @@ main (int argc, char **argv)
       if (optind < argc)
         {
           if (! freopen (argv[optind], "w", stdout))
-            error (EXIT_FAILURE, errno, "%s", argv[optind]);
+            error (EXIT_FAILURE, errno, "%s", quotef (argv[optind]));
           optind++;
         }
 
@@ -2154,7 +2090,7 @@ main (int argc, char **argv)
     }
 
   /* If the output format has not been explicitly selected, choose dumb
-     terminal format if GNU extensions are enabled, else `roff' format.  */
+     terminal format if GNU extensions are enabled, else 'roff' format.  */
 
   if (output_format == UNKNOWN_FORMAT)
     output_format = gnu_extensions ? DUMB_FORMAT : ROFF_FORMAT;
@@ -2163,12 +2099,12 @@ main (int argc, char **argv)
 
   initialize_regex ();
 
-  /* Read `Break character' file, if any.  */
+  /* Read 'Break character' file, if any.  */
 
   if (break_file)
     digest_break_file (break_file);
 
-  /* Read `Ignore words' file and `Only words' files, if any.  If any of
+  /* Read 'Ignore words' file and 'Only words' files, if any.  If any of
      these files is empty, reset the name of the file to NULL, to avoid
      unnecessary calls to search_table. */
 
@@ -2195,11 +2131,12 @@ main (int argc, char **argv)
 
   for (file_index = 0; file_index < number_input_files; file_index++)
     {
+      BLOCK *text_buffer = text_buffers + file_index;
 
-      /* Read the file in core, than study it.  */
+      /* Read the file in core, then study it.  */
 
-      swallow_file_in_memory (input_file_name[file_index], &text_buffer);
-      find_occurs_in_text ();
+      swallow_file_in_memory (input_file_name[file_index], text_buffer);
+      find_occurs_in_text (file_index);
 
       /* Maintain for each file how many lines has been read so far when its
          end is reached.  Incrementing the count first is a simple kludge to
@@ -2217,5 +2154,5 @@ main (int argc, char **argv)
 
   /* All done.  */
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

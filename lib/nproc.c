@@ -1,8 +1,6 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Detect the number of processors.
 
-   Copyright (C) 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,8 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
 /* Written by Glen Lenker and Bruno Haible.  */
 
@@ -26,7 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#if HAVE_PTHREAD_AFFINITY_NP && 0
+#if HAVE_PTHREAD_GETAFFINITY_NP && 0
 # include <pthread.h>
 # include <sched.h>
 #endif
@@ -73,7 +70,7 @@ num_processors_via_affinity_mask (void)
      Therefore this code is not enabled.
      glibc >= 2.3.4 has sched_getaffinity whereas NetBSD 5 has
      sched_getaffinity_np.  */
-#if HAVE_PTHREAD_AFFINITY_NP && defined __GLIBC__ && 0
+#if HAVE_PTHREAD_GETAFFINITY_NP && defined __GLIBC__ && 0
   {
     cpu_set_t set;
 
@@ -96,7 +93,7 @@ num_processors_via_affinity_mask (void)
           return count;
       }
   }
-#elif HAVE_PTHREAD_AFFINITY_NP && defined __NetBSD__ && 0
+#elif HAVE_PTHREAD_GETAFFINITY_NP && defined __NetBSD__ && 0
   {
     cpuset_t *set;
 
@@ -259,7 +256,7 @@ num_processors (enum nproc_query query)
       }
 
 #if defined _SC_NPROCESSORS_ONLN
-      { /* This works on glibc, MacOS X 10.5, FreeBSD, AIX, OSF/1, Solaris,
+      { /* This works on glibc, Mac OS X 10.5, FreeBSD, AIX, OSF/1, Solaris,
            Cygwin, Haiku.  */
         long int nprocs = sysconf (_SC_NPROCESSORS_ONLN);
         if (nprocs > 0)
@@ -270,7 +267,7 @@ num_processors (enum nproc_query query)
   else /* query == NPROC_ALL */
     {
 #if defined _SC_NPROCESSORS_CONF
-      { /* This works on glibc, MacOS X 10.5, FreeBSD, AIX, OSF/1, Solaris,
+      { /* This works on glibc, Mac OS X 10.5, FreeBSD, AIX, OSF/1, Solaris,
            Cygwin, Haiku.  */
         long int nprocs = sysconf (_SC_NPROCESSORS_CONF);
 
@@ -335,7 +332,7 @@ num_processors (enum nproc_query query)
      NPROC_CURRENT and NPROC_ALL.  */
 
 #if HAVE_SYSCTL && defined HW_NCPU
-  { /* This works on MacOS X, FreeBSD, NetBSD, OpenBSD.  */
+  { /* This works on Mac OS X, FreeBSD, NetBSD, OpenBSD.  */
     int nprocs;
     size_t len = sizeof (nprocs);
     static int mib[2] = { CTL_HW, HW_NCPU };

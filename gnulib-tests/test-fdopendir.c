@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Test opening a directory stream from a file descriptor.
-   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,13 +27,16 @@ SIGNATURE_CHECK (fdopendir, DIR *, (int));
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "progname.h"
 #include "macros.h"
 
 int
-main (void)
+main (int argc _GL_UNUSED, char *argv[])
 {
   DIR *d;
   int fd;
+
+  set_program_name (argv[0]);
 
   /* A non-directory cannot be turned into a directory stream.  */
   fd = open ("test-fdopendir.tmp", O_RDONLY | O_CREAT, 0600);
@@ -47,19 +48,31 @@ main (void)
   ASSERT (unlink ("test-fdopendir.tmp") == 0);
 
   /* A bad fd cannot be turned into a stream.  */
-  errno = 0;
-  ASSERT (fdopendir (-1) == NULL);
-  ASSERT (errno == EBADF);
+  {
+    errno = 0;
+    ASSERT (fdopendir (-1) == NULL);
+    ASSERT (errno == EBADF);
+  }
+  {
+    close (99);
+    errno = 0;
+    ASSERT (fdopendir (99) == NULL);
+    ASSERT (errno == EBADF);
+  }
 
   /* This should work.  */
   fd = open (".", O_RDONLY);
   ASSERT (0 <= fd);
   d = fdopendir (fd);
-  /* We know that fd is now out of our reach, but it is not specified
-     whether it is closed now or at the closedir.  We also can't
-     guarantee whether dirfd returns fd, some other descriptor, or
-     -1.  */
   ASSERT (d);
+  /* fdopendir should not close fd.  */
+  ASSERT (dup2 (fd, fd) == fd);
+
+  /* Don't test dirfd here.  dirfd (d) must return fd on current POSIX
+     platforms, but on pre-2008 platforms or on non-POSIX platforms
+     dirfd (fd) might return some other descriptor, or -1, and gnulib
+     does not work around this porting problem.  */
+
   ASSERT (closedir (d) == 0);
   /* Now we can guarantee that fd must be closed.  */
   errno = 0;

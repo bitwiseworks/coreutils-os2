@@ -1,5 +1,5 @@
 /* Open a stream to a file.
-   Copyright (C) 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 2007-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,31 +16,52 @@
 
 /* Written by Bruno Haible <bruno@clisp.org>, 2007.  */
 
+/* If the user's config.h happens to include <stdio.h>, let it include only
+   the system's <stdio.h> here, so that orig_freopen doesn't recurse to
+   rpl_freopen.  */
+#define __need_FILE
 #include <config.h>
 
 /* Get the original definition of freopen.  It might be defined as a macro.  */
-#define __need_FILE
 #include <stdio.h>
 #undef __need_FILE
 
-static inline FILE *
+#include <errno.h>
+
+static FILE *
 orig_freopen (const char *filename, const char *mode, FILE *stream)
 {
   return freopen (filename, mode, stream);
 }
 
 /* Specification.  */
-#include <stdio.h>
+/* Write "stdio.h" here, not <stdio.h>, otherwise OSF/1 5.1 DTK cc eliminates
+   this include because of the preliminary #include <stdio.h> above.  */
+#include "stdio.h"
 
 #include <string.h>
 
 FILE *
 rpl_freopen (const char *filename, const char *mode, FILE *stream)
 {
+  FILE *result;
+
 #if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
-  if (strcmp (filename, "/dev/null") == 0)
+  if (filename != NULL && strcmp (filename, "/dev/null") == 0)
     filename = "NUL";
 #endif
 
-  return orig_freopen (filename, mode, stream);
+  /* Clear errno to check the success of freopen() with it */
+  errno = 0;
+
+  result = orig_freopen (filename, mode, stream);
+
+#ifdef __KLIBC__
+  /* On OS/2 kLIBC, freopen() returns NULL even if it is successful
+     if filename is NULL. */
+  if (!filename && !result && !errno)
+    result = stream;
+#endif
+
+  return result;
 }

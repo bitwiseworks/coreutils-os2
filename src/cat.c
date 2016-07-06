@@ -1,5 +1,5 @@
 /* cat -- concatenate files and print on the standard output.
-   Copyright (C) 1988, 1990-1991, 1995-2010 Free Software Foundation, Inc.
+   Copyright (C) 1988-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,14 +33,14 @@
 #include <sys/ioctl.h>
 
 #include "system.h"
+#include "ioblksize.h"
 #include "error.h"
 #include "fadvise.h"
 #include "full-write.h"
-#include "quote.h"
 #include "safe-read.h"
 #include "xfreopen.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "cat"
 
 #define AUTHORS \
@@ -64,25 +64,24 @@ static char line_buf[LINE_COUNTER_BUF_LEN] =
     '\t', '\0'
   };
 
-/* Position in `line_buf' where printing starts.  This will not change
+/* Position in 'line_buf' where printing starts.  This will not change
    unless the number of lines is larger than 999999.  */
 static char *line_num_print = line_buf + LINE_COUNTER_BUF_LEN - 8;
 
-/* Position of the first digit in `line_buf'.  */
+/* Position of the first digit in 'line_buf'.  */
 static char *line_num_start = line_buf + LINE_COUNTER_BUF_LEN - 3;
 
-/* Position of the last digit in `line_buf'.  */
+/* Position of the last digit in 'line_buf'.  */
 static char *line_num_end = line_buf + LINE_COUNTER_BUF_LEN - 3;
 
-/* Preserves the `cat' function's local `newlines' between invocations.  */
+/* Preserves the 'cat' function's local 'newlines' between invocations.  */
 static int newlines2 = 0;
 
 void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -90,7 +89,12 @@ Usage: %s [OPTION]... [FILE]...\n\
 "),
               program_name);
       fputs (_("\
-Concatenate FILE(s), or standard input, to standard output.\n\
+Concatenate FILE(s) to standard output.\n\
+"), stdout);
+
+      emit_stdin_note ();
+
+      fputs (_("\
 \n\
   -A, --show-all           equivalent to -vET\n\
   -b, --number-nonblank    number nonempty output lines, overrides -n\n\
@@ -107,10 +111,6 @@ Concatenate FILE(s), or standard input, to standard output.\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      fputs (_("\
-\n\
-With no FILE, or when FILE is -, read standard input.\n\
-"), stdout);
       printf (_("\
 \n\
 Examples:\n\
@@ -118,7 +118,7 @@ Examples:\n\
   %s        Copy standard input to standard output.\n\
 "),
               program_name, program_name);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -144,7 +144,7 @@ next_line_num (void)
     line_num_print--;
 }
 
-/* Plain cat.  Copies the file behind `input_desc' to STDOUT_FILENO.
+/* Plain cat.  Copies the file behind 'input_desc' to STDOUT_FILENO.
    Return true if successful.  */
 
 static bool
@@ -168,7 +168,7 @@ simple_cat (
       n_read = safe_read (input_desc, buf, bufsize);
       if (n_read == SAFE_READ_ERROR)
         {
-          error (0, errno, "%s", infile);
+          error (0, errno, "%s", quotef (infile));
           return false;
         }
 
@@ -239,7 +239,7 @@ cat (
   /* Pointer to the next character in the input buffer.  */
   char *bpin;
 
-  /* Pointer to the first non-valid byte in the input buffer, i.e. the
+  /* Pointer to the first non-valid byte in the input buffer, i.e., the
      current end of the buffer.  */
   char *eob;
 
@@ -323,7 +323,8 @@ cat (
                     use_fionread = false;
                   else
                     {
-                      error (0, errno, _("cannot do ioctl on %s"), quote (infile));
+                      error (0, errno, _("cannot do ioctl on %s"),
+                             quoteaf (infile));
                       newlines2 = newlines;
                       return false;
                     }
@@ -340,7 +341,7 @@ cat (
               n_read = safe_read (input_desc, inbuf, insize);
               if (n_read == SAFE_READ_ERROR)
                 {
-                  error (0, errno, "%s", infile);
+                  error (0, errno, "%s", quotef (infile));
                   write_pending (outbuf, &bpout);
                   newlines2 = newlines;
                   return false;
@@ -364,7 +365,7 @@ cat (
               /* It was a real (not a sentinel) newline.  */
 
               /* Was the last line empty?
-                 (i.e. have two or more consecutive newlines been read?)  */
+                 (i.e., have two or more consecutive newlines been read?)  */
 
               if (++newlines > 0)
                 {
@@ -421,7 +422,7 @@ cat (
          which means that the buffer is empty or that a proper newline
          has been found.  */
 
-      /* If quoting, i.e. at least one of -v, -e, or -t specified,
+      /* If quoting, i.e., at least one of -v, -e, or -t specified,
          scan for chars that need conversion.  */
       if (show_nonprinting)
         {
@@ -526,8 +527,8 @@ main (int argc, char **argv)
   /* I-node number of the output.  */
   ino_t out_ino;
 
-  /* True if the output file should not be the same as any input file.  */
-  bool check_redirection = true;
+  /* True if the output is a regular file.  */
+  bool out_isreg;
 
   /* Nonzero if we have ever read standard input.  */
   bool have_read_stdin = false;
@@ -636,25 +637,9 @@ main (int argc, char **argv)
     error (EXIT_FAILURE, errno, _("standard output"));
 
   outsize = io_blksize (stat_buf);
-  /* Input file can be output file for non-regular files.
-     fstat on pipes returns S_IFSOCK on some systems, S_IFIFO
-     on others, so the checking should not be done for those types,
-     and to allow things like cat < /dev/tty > /dev/tty, checking
-     is not done for device files either.  */
-
-  if (S_ISREG (stat_buf.st_mode))
-    {
-      out_dev = stat_buf.st_dev;
-      out_ino = stat_buf.st_ino;
-    }
-  else
-    {
-      check_redirection = false;
-#ifdef lint  /* Suppress `used before initialized' warning.  */
-      out_dev = 0;
-      out_ino = 0;
-#endif
-    }
+  out_dev = stat_buf.st_dev;
+  out_ino = stat_buf.st_ino;
+  out_isreg = S_ISREG (stat_buf.st_mode) != 0;
 
   if (! (number || show_ends || squeeze_blank))
     {
@@ -687,7 +672,7 @@ main (int argc, char **argv)
           input_desc = open (infile, file_open_mode);
           if (input_desc < 0)
             {
-              error (0, errno, "%s", infile);
+              error (0, errno, "%s", quotef (infile));
               ok = false;
               continue;
             }
@@ -695,7 +680,7 @@ main (int argc, char **argv)
 
       if (fstat (input_desc, &stat_buf) < 0)
         {
-          error (0, errno, "%s", infile);
+          error (0, errno, "%s", quotef (infile));
           ok = false;
           goto contin;
         }
@@ -703,22 +688,21 @@ main (int argc, char **argv)
 
       fdadvise (input_desc, 0, 0, FADVISE_SEQUENTIAL);
 
-      /* Compare the device and i-node numbers of this input file with
-         the corresponding values of the (output file associated with)
-         stdout, and skip this input file if they coincide.  Input
-         files cannot be redirected to themselves.  */
+      /* Don't copy a nonempty regular file to itself, as that would
+         merely exhaust the output device.  It's better to catch this
+         error earlier rather than later.  */
 
-      if (check_redirection
+      if (out_isreg
           && stat_buf.st_dev == out_dev && stat_buf.st_ino == out_ino
-          && (input_desc != STDIN_FILENO))
+          && lseek (input_desc, 0, SEEK_CUR) < stat_buf.st_size)
         {
-          error (0, 0, _("%s: input file is output file"), infile);
+          error (0, 0, _("%s: input file is output file"), quotef (infile));
           ok = false;
           goto contin;
         }
 
-      /* Select which version of `cat' to use.  If any format-oriented
-         options were given use `cat'; otherwise use `simple_cat'.  */
+      /* Select which version of 'cat' to use.  If any format-oriented
+         options were given use 'cat'; otherwise use 'simple_cat'.  */
 
       if (! (number || show_ends || show_nonprinting
              || show_tabs || squeeze_blank))
@@ -750,8 +734,8 @@ main (int argc, char **argv)
              A line number requires seldom more than LINE_COUNTER_BUF_LEN
              positions.
 
-             Align the output buffer to a page size boundary, for efficency on
-             some paging implementations, so add PAGE_SIZE - 1 bytes to the
+             Align the output buffer to a page size boundary, for efficiency
+             on some paging implementations, so add PAGE_SIZE - 1 bytes to the
              request to make room for the alignment.  */
 
           outbuf = xmalloc (outsize - 1 + insize * 4 + LINE_COUNTER_BUF_LEN
@@ -770,7 +754,7 @@ main (int argc, char **argv)
     contin:
       if (!STREQ (infile, "-") && close (input_desc) < 0)
         {
-          error (0, errno, "%s", infile);
+          error (0, errno, "%s", quotef (infile));
           ok = false;
         }
     }
@@ -779,5 +763,5 @@ main (int argc, char **argv)
   if (have_read_stdin && close (STDIN_FILENO) < 0)
     error (EXIT_FAILURE, errno, _("closing standard input"));
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

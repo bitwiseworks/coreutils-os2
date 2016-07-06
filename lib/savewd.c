@@ -1,6 +1,6 @@
 /* Save and restore the working directory, possibly using a child process.
 
-   Copyright (C) 2006-2007, 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2006-2007, 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,9 +19,10 @@
 
 #include <config.h>
 
+#define SAVEWD_INLINE _GL_EXTERN_INLINE
+
 #include "savewd.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -31,7 +32,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "dirname.h"
+#include "assure.h"
+#include "dosname.h"
 #include "fcntl-safer.h"
 
 /* Save the working directory into *WD, if it hasn't been saved
@@ -86,7 +88,7 @@ savewd_save (struct savewd *wd)
       break;
 
     default:
-      assert (false);
+      assure (false);
     }
 
   return false;
@@ -114,7 +116,7 @@ savewd_chdir (struct savewd *wd, char const *dir, int options,
           open_result[1] = errno;
         }
 
-      if (fd < 0 && (errno != EACCES || (options & SAVEWD_CHDIR_READABLE)))
+      if (fd < 0 && errno != EACCES)
         result = -1;
     }
 
@@ -142,11 +144,11 @@ savewd_chdir (struct savewd *wd, char const *dir, int options,
                 break;
 
               case FORKING_STATE:
-                assert (wd->val.child == 0);
+                assure (wd->val.child == 0);
                 break;
 
               default:
-                assert (false);
+                assure (false);
               }
         }
     }
@@ -203,7 +205,7 @@ savewd_restore (struct savewd *wd, int status)
           {
             int child_status;
             while (waitpid (child, &child_status, 0) < 0)
-              assert (errno == EINTR);
+              assure (errno == EINTR);
             wd->val.child = -1;
             if (! WIFEXITED (child_status))
               raise (WTERMSIG (child_status));
@@ -213,7 +215,7 @@ savewd_restore (struct savewd *wd, int status)
       break;
 
     default:
-      assert (false);
+      assure (false);
     }
 
   return 0;
@@ -234,11 +236,11 @@ savewd_finish (struct savewd *wd)
       break;
 
     case FORKING_STATE:
-      assert (wd->val.child < 0);
+      assure (wd->val.child < 0);
       break;
 
     default:
-      assert (false);
+      assure (false);
     }
 
   wd->state = FINAL_STATE;
@@ -254,7 +256,7 @@ savewd_finish (struct savewd *wd)
    This is why savewd_chdir is broken out into another function;
    savewd_chdir's callers _can_ inspect the file system to decide
    whether to call savewd_chdir.  */
-static inline bool
+static bool
 savewd_delegating (struct savewd const *wd)
 {
   return wd->state == FORKING_STATE && 0 < wd->val.child;

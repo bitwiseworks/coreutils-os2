@@ -1,5 +1,5 @@
 /* Align/Truncate a string in a given screen width
-   Copyright (C) 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -79,27 +79,6 @@ wc_truncate (wchar_t *wc, size_t width)
   return cells;
 }
 
-/* FIXME: move this function to gnulib as it's missing on:
-   OpenBSD 3.8, IRIX 5.3, Solaris 2.5.1, mingw, BeOS  */
-
-static int
-rpl_wcswidth (const wchar_t *s, size_t n)
-{
-  int ret = 0;
-
-  while (n-- > 0 && *s != L'\0')
-    {
-      int nwidth = wcwidth (*s++);
-      if (nwidth == -1)             /* non printable */
-        return -1;
-      if (ret > (INT_MAX - nwidth)) /* overflow */
-        return -1;
-      ret += nwidth;
-    }
-
-  return ret;
-}
-
 /* Write N_SPACES space characters to DEST while ensuring
    nothing is written beyond DEST_END. A terminating NUL
    is always added to DEST.
@@ -147,7 +126,7 @@ mbsalign (const char *src, char *dest, size_t dest_size,
   /* In multi-byte locales convert to wide characters
      to allow easy truncation. Also determine number
      of screen columns used.  */
-  if (MB_CUR_MAX > 1)
+  if (!(flags & MBA_UNIBYTE_ONLY) && MB_CUR_MAX > 1)
     {
       size_t src_chars = mbstowcs (NULL, src, 0);
       if (src_chars == SIZE_MAX)
@@ -171,7 +150,7 @@ mbsalign (const char *src, char *dest, size_t dest_size,
           str_wc[src_chars - 1] = L'\0';
           wc_enabled = true;
           conversion = wc_ensure_printable (str_wc);
-          n_cols = rpl_wcswidth (str_wc, src_chars);
+          n_cols = wcswidth (str_wc, src_chars);
         }
     }
 
@@ -212,37 +191,46 @@ mbsalign_unibyte:
   /* indicate to caller how many cells needed (not including padding).  */
   *width = n_cols;
 
-  /* indicate to caller how many bytes needed (not including NUL).  */
-  ret = n_used_bytes + (n_spaces * 1);
+  {
+    size_t start_spaces, end_spaces;
 
-  /* Write as much NUL terminated output to DEST as possible.  */
-  if (dest_size != 0)
-    {
-      size_t start_spaces, end_spaces, space_left;
-      char *dest_end = dest + dest_size - 1;
+    switch (align)
+      {
+      case MBS_ALIGN_LEFT:
+        start_spaces = 0;
+        end_spaces = n_spaces;
+        break;
+      case MBS_ALIGN_RIGHT:
+        start_spaces = n_spaces;
+        end_spaces = 0;
+        break;
+      case MBS_ALIGN_CENTER:
+      default:
+        start_spaces = n_spaces / 2 + n_spaces % 2;
+        end_spaces = n_spaces / 2;
+        break;
+      }
 
-      switch (align)
+      if (flags & MBA_NO_LEFT_PAD)
+        start_spaces = 0;
+      if (flags & MBA_NO_RIGHT_PAD)
+        end_spaces = 0;
+
+      /* Write as much NUL terminated output to DEST as possible.  */
+      if (dest_size != 0)
         {
-        case MBS_ALIGN_LEFT:
-          start_spaces = 0;
-          end_spaces = n_spaces;
-          break;
-        case MBS_ALIGN_RIGHT:
-          start_spaces = n_spaces;
-          end_spaces = 0;
-          break;
-        case MBS_ALIGN_CENTER:
-        default:
-          start_spaces = n_spaces / 2 + n_spaces % 2;
-          end_spaces = n_spaces / 2;
-          break;
+          size_t space_left;
+          char *dest_end = dest + dest_size - 1;
+
+          dest = mbs_align_pad (dest, dest_end, start_spaces);
+          space_left = dest_end - dest;
+          dest = mempcpy (dest, str_to_print, MIN (n_used_bytes, space_left));
+          mbs_align_pad (dest, dest_end, end_spaces);
         }
 
-      dest = mbs_align_pad (dest, dest_end, start_spaces);
-      space_left = dest_end - dest;
-      dest = mempcpy (dest, str_to_print, MIN (n_used_bytes, space_left));
-      mbs_align_pad (dest, dest_end, end_spaces);
-    }
+    /* indicate to caller how many bytes needed (not including NUL).  */
+    ret = n_used_bytes + ((start_spaces + end_spaces) * 1);
+  }
 
 mbsalign_cleanup:
 

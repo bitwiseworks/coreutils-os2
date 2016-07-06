@@ -1,4 +1,4 @@
-/* Copyright (C) 1991-2001, 2003-2007, 2009-2010 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2001, 2003-2007, 2009-2016 Free Software Foundation, Inc.
 
    NOTE: The canonical source of this file is maintained with the GNU C Library.
    Bugs can be reported to bug-glibc@prep.ai.mit.edu.
@@ -26,11 +26,11 @@
 #else
 # include <config.h>
 # if FPRINTFTIME
-#  include "ignore-value.h"
 #  include "fprintftime.h"
 # else
 #  include "strftime.h"
 # endif
+# include "time-internal.h"
 #endif
 
 #include <ctype.h>
@@ -40,7 +40,7 @@
 extern char *tzname[];
 #endif
 
-/* Do multibyte processing if multibytes are supported, unless
+/* Do multibyte processing if multibyte encodings are supported, unless
    multibyte sequences are safe in formats.  Multibyte sequences are
    safe if they cannot contain byte sequences that look like format
    conversion specifications.  The multibyte encodings used by the
@@ -48,8 +48,11 @@ extern char *tzname[];
    GB18030, EUC-TW, BIG5, BIG5-HKSCS, CP950, EUC-JP, EUC-KR, CP949,
    SHIFT_JIS, CP932, JOHAB) are safe for formats, because the byte '%'
    cannot occur in a multibyte character except in the first byte.
-   But this does not hold for the DEC-HANYU encoding used on OSF/1.  */
-#if !defined __osf__
+
+   The DEC-HANYU encoding used on OSF/1 is not safe for formats, but
+   this encoding has never been seen in real-life use, so we ignore
+   it.  */
+#if !(defined __osf__ && 0)
 # define MULTIBYTE_IS_FORMAT_SAFE 1
 #endif
 #define DO_MULTIBYTE (! MULTIBYTE_IS_FORMAT_SAFE)
@@ -119,21 +122,10 @@ extern char *tzname[];
 
 
 #ifdef _LIBC
+# define mktime_z(tz, tm) mktime (tm)
 # define tzname __tzname
 # define tzset __tzset
 #endif
-
-#if !HAVE_TM_GMTOFF
-/* Portable standalone applications should supply a "time.h" that
-   declares a POSIX-compliant localtime_r, for the benefit of older
-   implementations that lack localtime_r or have a nonstandard one.
-   See the gnulib time_r module for one way to implement this.  */
-# undef __gmtime_r
-# undef __localtime_r
-# define __gmtime_r gmtime_r
-# define __localtime_r localtime_r
-#endif
-
 
 #ifndef FPRINTFTIME
 # define FPRINTFTIME 0
@@ -169,15 +161,16 @@ extern char *tzname[];
 #define add(n, f)                                                             \
   do                                                                          \
     {                                                                         \
-      int _n = (n);                                                           \
-      int _delta = width - _n;                                                \
-      int _incr = _n + (_delta > 0 ? _delta : 0);                             \
-      if ((size_t) _incr >= maxsize - i)                                      \
+      size_t _n = (n);                                                        \
+      size_t _w = (width < 0 ? 0 : width);                                    \
+      size_t _incr = _n < _w ? _w : _n;                                       \
+      if (_incr >= maxsize - i)                                               \
         return 0;                                                             \
       if (p)                                                                  \
         {                                                                     \
-          if (digits == 0 && _delta > 0)                                      \
+          if (digits == 0 && _n < _w)                                         \
             {                                                                 \
+              size_t _delta = width - _n;                                     \
               if (pad == L_('0'))                                             \
                 memset_zero (p, _delta);                                      \
               else                                                            \
@@ -206,13 +199,12 @@ extern char *tzname[];
            fwrite_uppcase (p, (s), _n);                                       \
          else                                                                 \
            {                                                                  \
-             /* We are ignoring the value of fwrite here, in spite of the     \
-                fact that technically, that may not be valid: the fwrite      \
-                specification in POSIX 2008 defers to that of fputc, which    \
-                is intended to be consistent with the one from ISO C,         \
-                which permits failure due to ENOMEM *without* setting the     \
-                stream's error indicator.  */                                 \
-             ignore_value (fwrite ((s), _n, 1, p));                           \
+             /* Ignore the value of fwrite.  The caller can determine whether \
+                an error occurred by inspecting ferror (P).  All known fwrite \
+                implementations set the stream's error indicator when they    \
+                fail due to ENOMEM etc., even though C11 and POSIX.1-2008 do  \
+                not require this.  */                                         \
+             fwrite (s, _n, 1, p);                                            \
            }                                                                  \
        }                                                                      \
      while (0)                                                                \
@@ -285,7 +277,7 @@ extern char *tzname[];
 #  define TOLOWER(Ch, L) tolower (Ch)
 # endif
 #endif
-/* We don't use `isdigit' here since the locale dependent
+/* We don't use 'isdigit' here since the locale dependent
    interpretation is not what we want here.  We only need to accept
    the arabic digits in the ASCII range.  One day there is perhaps a
    more reliable way to accept other sets of digits.  */
@@ -383,12 +375,7 @@ iso_week_days (int yday, int wday)
 
 /* When compiling this file, GNU applications can #define my_strftime
    to a symbol (typically nstrftime) to get an extended strftime with
-   extra arguments UT and NS.  Emacs is a special case for now, but
-   this Emacs-specific code can be removed once Emacs's config.h
-   defines my_strftime.  */
-#if defined emacs && !defined my_strftime
-# define my_strftime nstrftime
-#endif
+   extra arguments TZ and NS.  */
 
 #if FPRINTFTIME
 # undef my_strftime
@@ -396,8 +383,9 @@ iso_week_days (int yday, int wday)
 #endif
 
 #ifdef my_strftime
-# define extra_args , ut, ns
-# define extra_args_spec , int ut, int ns
+# undef HAVE_TZSET
+# define extra_args , tz, ns
+# define extra_args_spec , timezone_t tz, int ns
 #else
 # if defined COMPILE_WIDE
 #  define my_strftime wcsftime
@@ -409,7 +397,7 @@ iso_week_days (int yday, int wday)
 # define extra_args
 # define extra_args_spec
 /* We don't have this information in general.  */
-# define ut 0
+# define tz 1
 # define ns 0
 #endif
 
@@ -433,7 +421,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
 #ifdef _NL_CURRENT
   /* We cannot make the following values variables since we must delay
      the evaluation of these values until really needed since some
-     expressions might not be valid in every situation.  The `struct tm'
+     expressions might not be valid in every situation.  The 'struct tm'
      might be generated by a strptime() call that initialized
      only a few elements.  Dereference the pointers only if the format
      requires this.  Then it is ok to fail if the pointers are invalid.  */
@@ -452,6 +440,9 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
 # define aw_len STRLEN (a_wkday)
 # define am_len STRLEN (a_month)
 # define ap_len STRLEN (ampm)
+#endif
+#if HAVE_TZNAME
+  char **tzname_vec = tzname;
 #endif
   const char *zone;
   size_t i = 0;
@@ -481,20 +472,29 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
   zone = (const char *) tp->tm_zone;
 #endif
 #if HAVE_TZNAME
-  if (ut)
+  if (!tz)
     {
       if (! (zone && *zone))
         zone = "GMT";
     }
   else
     {
+# if !HAVE_TM_ZONE
+      /* Infer the zone name from *TZ instead of from TZNAME.  */
+      tzname_vec = tz->tzname_copy;
+# endif
       /* POSIX.1 requires that local time zone information be used as
          though strftime called tzset.  */
 # if HAVE_TZSET
       tzset ();
 # endif
     }
+  /* The tzset() call might have changed the value.  */
+  if (!(zone && *zone) && tp->tm_isdst >= 0)
+    zone = tzname_vec[tp->tm_isdst != 0];
 #endif
+  if (! zone)
+    zone = "";
 
   if (hour12 > 12)
     hour12 -= 12;
@@ -679,24 +679,44 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
       switch (format_char)
         {
 #define DO_NUMBER(d, v) \
-          digits = d;                                                         \
-          number_value = v; goto do_number
+          do                                                                  \
+            {                                                                 \
+              digits = d;                                                     \
+              number_value = v;                                               \
+              goto do_number;                                                 \
+            }                                                                 \
+          while (0)
 #define DO_SIGNED_NUMBER(d, negative, v) \
-          digits = d;                                                         \
-          negative_number = negative;                                         \
-          u_number_value = v; goto do_signed_number
+          do                                                                  \
+            {                                                                 \
+              digits = d;                                                     \
+              negative_number = negative;                                     \
+              u_number_value = v;                                             \
+              goto do_signed_number;                                          \
+            }                                                                 \
+          while (0)
 
           /* The mask is not what you might think.
              When the ordinal i'th bit is set, insert a colon
              before the i'th digit of the time zone representation.  */
 #define DO_TZ_OFFSET(d, negative, mask, v) \
-          digits = d;                                                         \
-          negative_number = negative;                                         \
-          tz_colon_mask = mask;                                               \
-          u_number_value = v; goto do_tz_offset
+          do                                                                  \
+            {                                                                 \
+              digits = d;                                                     \
+              negative_number = negative;                                     \
+              tz_colon_mask = mask;                                           \
+              u_number_value = v;                                             \
+              goto do_tz_offset;                                              \
+            }                                                                 \
+          while (0)
 #define DO_NUMBER_SPACEPAD(d, v) \
-          digits = d;                                                         \
-          number_value = v; goto do_number_spacepad
+          do                                                                  \
+            {                                                                 \
+              digits = d;                                                     \
+              number_value = v;                                               \
+              goto do_number_spacepad;                                        \
+            }                                                                 \
+          while (0)
 
         case L_('%'):
           if (modifier != 0)
@@ -892,7 +912,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
           goto do_number_body;
 
         do_number_spacepad:
-          /* Force `_' flag unless overridden by `0' or `-' flag.  */
+          /* Force '_' flag unless overridden by '0' or '-' flag.  */
           if (pad != L_('0') && pad != L_('-'))
             pad = L_('_');
 
@@ -1122,7 +1142,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
             time_t t;
 
             ltm = *tp;
-            t = mktime (&ltm);
+            t = mktime_z (tz, &ltm);
 
             /* Generate string value for T using time_t arithmetic;
                this works even if sizeof (long) < sizeof (time_t).  */
@@ -1263,9 +1283,9 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
             }
           if (modifier == L_('O'))
             goto bad_format;
-          else
-            DO_SIGNED_NUMBER (4, tp->tm_year < -TM_YEAR_BASE,
-                              tp->tm_year + (unsigned int) TM_YEAR_BASE);
+
+          DO_SIGNED_NUMBER (4, tp->tm_year < -TM_YEAR_BASE,
+                            tp->tm_year + (unsigned int) TM_YEAR_BASE);
 
         case L_('y'):
           if (modifier == L_('E'))
@@ -1296,14 +1316,6 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
               to_uppcase = false;
               to_lowcase = true;
             }
-
-#if HAVE_TZNAME
-          /* The tzset() call might have changed the value.  */
-          if (!(zone && *zone) && tp->tm_isdst >= 0)
-            zone = tzname[tp->tm_isdst != 0];
-#endif
-          if (! zone)
-            zone = "";
 
 #ifdef COMPILE_WIDE
           {
@@ -1344,7 +1356,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
 #if HAVE_TM_GMTOFF
             diff = tp->tm_gmtoff;
 #else
-            if (ut)
+            if (!tz)
               diff = 0;
             else
               {
@@ -1353,7 +1365,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
                 time_t lt;
 
                 ltm = *tp;
-                lt = mktime (&ltm);
+                lt = mktime_z (tz, &ltm);
 
                 if (lt == (time_t) -1)
                   {
@@ -1362,7 +1374,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
                        occurred.  */
                     struct tm tm;
 
-                    if (! __localtime_r (&lt, &tm)
+                    if (! localtime_rz (tz, &lt, &tm)
                         || ((ltm.tm_sec ^ tm.tm_sec)
                             | (ltm.tm_min ^ tm.tm_min)
                             | (ltm.tm_hour ^ tm.tm_hour)
@@ -1372,7 +1384,7 @@ strftime_case_ (bool upcase, STREAM_OR_CHAR_T *s,
                       break;
                   }
 
-                if (! __gmtime_r (&lt, &gtm))
+                if (! localtime_rz (0, &lt, &gtm))
                   break;
 
                 diff = tm_diff (&ltm, &gtm);
@@ -1450,16 +1462,4 @@ my_strftime (STREAM_OR_CHAR_T *s, STRFTIME_ARG (size_t maxsize)
 
 #if defined _LIBC && ! FPRINTFTIME
 libc_hidden_def (my_strftime)
-#endif
-
-
-#if defined emacs && ! FPRINTFTIME
-/* For Emacs we have a separate interface which corresponds to the normal
-   strftime function plus the ut argument, but without the ns argument.  */
-size_t
-emacs_strftimeu (char *s, size_t maxsize, const char *format,
-                 const struct tm *tp, int ut)
-{
-  return my_strftime (s, maxsize, format, tp, ut, 0);
-}
 #endif

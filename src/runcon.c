@@ -1,5 +1,5 @@
 /* runcon -- run command with specified security context
-   Copyright (C) 2005-2010 Free Software Foundation, Inc.
+   Copyright (C) 2005-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,9 +15,9 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /*
- * runcon [ context |
- *         ( [ -c ] [ -r role ] [-t type] [ -u user ] [ -l levelrange ] )
- *         command [arg1 [arg2 ...] ]
+ * runcon [ context
+ *          | ( [ -c ] [ -r role ] [-t type] [ -u user ] [ -l levelrange ] )
+ *          command [arg1 [arg2 ...] ]
  *
  * attempt to run the specified command with the specified context.
  *
@@ -45,18 +45,12 @@
 #include <getopt.h>
 #include <selinux/selinux.h>
 #include <selinux/context.h>
-#ifdef HAVE_SELINUX_FLASK_H
-# include <selinux/flask.h>
-#else
-# define SECCLASS_PROCESS 0
-#endif
 #include <sys/types.h>
 #include "system.h"
 #include "error.h"
 #include "quote.h"
-#include "quotearg.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "runcon"
 
 #define AUTHORS proper_name ("Russell Coker")
@@ -77,8 +71,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -86,9 +79,13 @@ Usage: %s CONTEXT COMMAND [args]\n\
   or:  %s [ -c ] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [args]\n\
 "), program_name, program_name);
       fputs (_("\
-Run a program in a different security context.\n\
+Run a program in a different SELinux security context.\n\
 With neither CONTEXT nor COMMAND, print the current security context.\n\
-\n\
+"), stdout);
+
+      emit_mandatory_arg_note ();
+
+      fputs (_("\
   CONTEXT            Complete security context\n\
   -c, --compute      compute process transition context before modifying\n\
   -t, --type=TYPE    type (for same role as parent)\n\
@@ -99,7 +96,7 @@ With neither CONTEXT nor COMMAND, print the current security context.\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -112,9 +109,9 @@ main (int argc, char **argv)
   char *user = NULL;
   char *type = NULL;
   char *context = NULL;
-  security_context_t cur_context = NULL;
-  security_context_t file_context = NULL;
-  security_context_t new_context = NULL;
+  char *cur_context = NULL;
+  char *file_context = NULL;
+  char *new_context = NULL;
   bool compute_trans = false;
 
   context_t con;
@@ -174,7 +171,7 @@ main (int argc, char **argv)
         error (EXIT_FAILURE, errno, _("failed to get current context"));
       fputs (cur_context, stdout);
       fputc ('\n', stdout);
-      exit (EXIT_SUCCESS);
+      return EXIT_SUCCESS;
     }
 
   if (!(user || role || type || range || compute_trans))
@@ -194,15 +191,15 @@ main (int argc, char **argv)
     }
 
   if (is_selinux_enabled () != 1)
-    error (EXIT_FAILURE, 0,
-           _("%s may be used only on a SELinux kernel"), program_name);
+    error (EXIT_FAILURE, 0, _("%s may be used only on a SELinux kernel"),
+           program_name);
 
   if (context)
     {
       con = context_new (context);
       if (!con)
         error (EXIT_FAILURE, errno, _("failed to create security context: %s"),
-               quotearg_colon (context));
+               quote (context));
     }
   else
     {
@@ -216,12 +213,12 @@ main (int argc, char **argv)
           if (getfilecon (argv[optind], &file_context) == -1)
             error (EXIT_FAILURE, errno,
                    _("failed to get security context of %s"),
-                   quote (argv[optind]));
+                   quoteaf (argv[optind]));
           /* compute result of process transition */
           if (security_compute_create (cur_context, file_context,
-                                       SECCLASS_PROCESS, &new_context) != 0)
-            error (EXIT_FAILURE, errno,
-                   _("failed to compute a new context"));
+                                       string_to_security_class ("process"),
+                                       &new_context) != 0)
+            error (EXIT_FAILURE, errno, _("failed to compute a new context"));
           /* free contexts */
           freecon (file_context);
           freecon (cur_context);
@@ -233,20 +230,24 @@ main (int argc, char **argv)
       con = context_new (cur_context);
       if (!con)
         error (EXIT_FAILURE, errno, _("failed to create security context: %s"),
-               quotearg_colon (cur_context));
+               quote (cur_context));
       if (user && context_user_set (con, user))
-        error (EXIT_FAILURE, errno, _("failed to set new user %s"), user);
+        error (EXIT_FAILURE, errno, _("failed to set new user: %s"),
+               quote (user));
       if (type && context_type_set (con, type))
-        error (EXIT_FAILURE, errno, _("failed to set new type %s"), type);
+        error (EXIT_FAILURE, errno, _("failed to set new type: %s"),
+               quote (type));
       if (range && context_range_set (con, range))
-        error (EXIT_FAILURE, errno, _("failed to set new range %s"), range);
+        error (EXIT_FAILURE, errno, _("failed to set new range: %s"),
+               quote (range));
       if (role && context_role_set (con, role))
-        error (EXIT_FAILURE, errno, _("failed to set new role %s"), role);
+        error (EXIT_FAILURE, errno, _("failed to set new role: %s"),
+               quote (role));
     }
 
   if (security_check_context (context_str (con)) < 0)
     error (EXIT_FAILURE, errno, _("invalid context: %s"),
-           quotearg_colon (context_str (con)));
+           quote (context_str (con)));
 
   if (setexeccon (context_str (con)) != 0)
     error (EXIT_FAILURE, errno, _("unable to set security context %s"),
@@ -256,9 +257,7 @@ main (int argc, char **argv)
 
   execvp (argv[optind], argv + optind);
 
-  {
-    int exit_status = (errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE);
-    error (0, errno, "%s", argv[optind]);
-    exit (exit_status);
-  }
+  int exit_status = errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE;
+  error (0, errno, "%s", quote (argv[optind]));
+  return exit_status;
 }

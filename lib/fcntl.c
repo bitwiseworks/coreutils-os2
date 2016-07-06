@@ -1,6 +1,6 @@
 /* Provide file descriptor control.
 
-   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,9 +33,12 @@
 #undef fcntl
 
 #if (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
-/* Get declarations of the Win32 API functions.  */
+/* Get declarations of the native Windows API functions.  */
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
+
+/* Get _get_osfhandle.  */
+# include "msvc-nothrow.h"
 
 /* Upper bound on getdtablesize().  See lib/getdtablesize.c.  */
 # define OPEN_MAX_MAX 0x10000
@@ -86,16 +89,32 @@ dupfd (int oldfd, int newfd, int flags)
                             inherit,                /* InheritHandle */
                             DUPLICATE_SAME_ACCESS)) /* Options */
         {
-          /* TODO: Translate GetLastError () into errno.  */
-          errno = EMFILE;
+          switch (GetLastError ())
+            {
+              case ERROR_TOO_MANY_OPEN_FILES:
+                errno = EMFILE;
+                break;
+              case ERROR_INVALID_HANDLE:
+              case ERROR_INVALID_TARGET_HANDLE:
+              case ERROR_DIRECT_ACCESS_HANDLE:
+                errno = EBADF;
+                break;
+              case ERROR_INVALID_PARAMETER:
+              case ERROR_INVALID_FUNCTION:
+              case ERROR_INVALID_ACCESS:
+                errno = EINVAL;
+                break;
+              default:
+                errno = EACCES;
+                break;
+            }
           result = -1;
           break;
         }
-      duplicated_fd = _open_osfhandle ((long) new_handle, flags);
+      duplicated_fd = _open_osfhandle ((intptr_t) new_handle, flags);
       if (duplicated_fd < 0)
         {
           CloseHandle (new_handle);
-          errno = EMFILE;
           result = -1;
           break;
         }
@@ -143,6 +162,93 @@ dupfd (int oldfd, int newfd, int flags)
 }
 #endif /* W32 */
 
+#ifdef __KLIBC__
+
+# define INCL_DOS
+# include <os2.h>
+
+static int
+klibc_fcntl (int fd, int action, /* arg */...)
+{
+  va_list arg_ptr;
+  int arg;
+  struct stat sbuf;
+  int result = -1;
+
+  va_start (arg_ptr, action);
+  arg = va_arg (arg_ptr, int);
+  result = fcntl (fd, action, arg);
+  /* EPERM for F_DUPFD, ENOTSUP for others */
+  if (result == -1 && (errno == EPERM || errno == ENOTSUP)
+      && !fstat (fd, &sbuf) && S_ISDIR (sbuf.st_mode))
+  {
+    ULONG ulMode;
+
+    switch (action)
+      {
+      case F_DUPFD:
+        /* Find available fd */
+        while (fcntl (arg, F_GETFL) != -1 || errno != EBADF)
+          arg++;
+
+        result = dup2 (fd, arg);
+        break;
+
+      /* Using underlying APIs is right ? */
+      case F_GETFD:
+        if (DosQueryFHState (fd, &ulMode))
+          break;
+
+        result = (ulMode & OPEN_FLAGS_NOINHERIT) ? FD_CLOEXEC : 0;
+        break;
+
+      case F_SETFD:
+        if (arg & ~FD_CLOEXEC)
+          break;
+
+        if (DosQueryFHState (fd, &ulMode))
+          break;
+
+        if (arg & FD_CLOEXEC)
+          ulMode |= OPEN_FLAGS_NOINHERIT;
+        else
+          ulMode &= ~OPEN_FLAGS_NOINHERIT;
+
+        /* Filter supported flags.  */
+        ulMode &= (OPEN_FLAGS_WRITE_THROUGH | OPEN_FLAGS_FAIL_ON_ERROR
+                   | OPEN_FLAGS_NO_CACHE | OPEN_FLAGS_NOINHERIT);
+
+        if (DosSetFHState (fd, ulMode))
+          break;
+
+        result = 0;
+        break;
+
+      case F_GETFL:
+        result = 0;
+        break;
+
+      case F_SETFL:
+        if (arg != 0)
+          break;
+
+        result = 0;
+        break;
+
+      default :
+        errno = EINVAL;
+        break;
+      }
+  }
+
+  va_end (arg_ptr);
+
+  return result;
+}
+
+# define fcntl klibc_fcntl
+#endif
+
 /* Perform the specified ACTION on the file descriptor FD, possibly
    using the argument ARG further described below.  This replacement
    handles the following actions, and forwards all others on to the
@@ -187,7 +293,21 @@ rpl_fcntl (int fd, int action, /* arg */...)
           errno = EINVAL;
         else
           {
+            /* Haiku alpha 2 loses fd flags on original.  */
+            int flags = fcntl (fd, F_GETFD);
+            if (flags < 0)
+              {
+                result = -1;
+                break;
+              }
             result = fcntl (fd, action, target);
+            if (0 <= result && fcntl (fd, F_SETFD, flags) == -1)
+              {
+                int saved_errno = errno;
+                close (result);
+                result = -1;
+                errno = saved_errno;
+              }
 # if REPLACE_FCHDIR
             if (0 <= result)
               result = _gl_register_dup (fd, result);

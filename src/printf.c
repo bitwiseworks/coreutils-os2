@@ -1,5 +1,5 @@
 /* printf - format and print data
-   Copyright (C) 1990-2010 Free Software Foundation, Inc.
+   Copyright (C) 1990-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -41,7 +41,11 @@
    %b = print an argument string, interpreting backslash escapes,
      except that octal escapes are of the form \0 or \0ooo.
 
-   The `format' argument is re-used as many times as necessary
+   %q = print an argument string in a format that can be
+     reused as shell input.  Escaped characters used the proposed
+     POSIX $'' syntax supported by most shells.
+
+   The 'format' argument is re-used as many times as necessary
    to convert all of the given arguments.
 
    David MacKenzie <djm@gnu.ai.mit.edu> */
@@ -57,7 +61,7 @@
 #include "unicodeio.h"
 #include "xprintf.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "printf"
 
 #define AUTHORS proper_name ("David MacKenzie")
@@ -82,8 +86,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -123,14 +126,16 @@ FORMAT controls the output as in C printf.  Interpreted sequences are:\n\
 "), stdout);
       fputs (_("\
   %%      a single %\n\
-  %b      ARGUMENT as a string with `\\' escapes interpreted,\n\
+  %b      ARGUMENT as a string with '\\' escapes interpreted,\n\
           except that octal escapes are of the form \\0 or \\0NNN\n\
-\n\
+  %q      ARGUMENT is printed in a format that can be reused as shell input,\n\
+          escaping non-printable characters with the proposed POSIX $'' syntax.\
+\n\n\
 and all C format specifications ending with one of diouxXfeEgGcs, with\n\
 ARGUMENTs converted to proper type first.  Variable widths are handled.\n\
 "), stdout);
       printf (USAGE_BUILTIN_WARNING, PROGRAM_NAME);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -140,15 +145,15 @@ verify_numeric (const char *s, const char *end)
 {
   if (errno)
     {
-      error (0, errno, "%s", s);
+      error (0, errno, "%s", quote (s));
       exit_status = EXIT_FAILURE;
     }
   else if (*end)
     {
       if (s == end)
-        error (0, 0, _("%s: expected a numeric value"), s);
+        error (0, 0, _("%s: expected a numeric value"), quote (s));
       else
-        error (0, 0, _("%s: value not completely converted"), s);
+        error (0, 0, _("%s: value not completely converted"), quote (s));
       exit_status = EXIT_FAILURE;
     }
 }
@@ -160,7 +165,7 @@ FUNC_NAME (char const *s)						 \
   char *end;								 \
   TYPE val;								 \
                                                                          \
-  if (*s == '\"' || *s == '\'')						 \
+  if ((*s == '\"' || *s == '\'') && *(s + 1))				 \
     {									 \
       unsigned char ch = *++s;						 \
       val = ch;								 \
@@ -465,14 +470,14 @@ print_direc (const char *start, size_t length, char conversion,
 }
 
 /* Print the text in FORMAT, using ARGV (with ARGC elements) for
-   arguments to any `%' directives.
+   arguments to any '%' directives.
    Return the number of elements of ARGV used.  */
 
 static int
 print_formatted (const char *format, int argc, char **argv)
 {
   int save_argc = argc;		/* Preserve original value.  */
-  const char *f;		/* Pointer into `format'.  */
+  const char *f;		/* Pointer into 'format'.  */
   const char *direc_start;	/* Start of % directive.  */
   size_t direc_length;		/* Length of % directive.  */
   bool have_field_width;	/* True if FIELD_WIDTH is valid.  */
@@ -507,6 +512,18 @@ print_formatted (const char *format, int argc, char **argv)
               break;
             }
 
+          if (*f == 'q')
+            {
+              if (argc > 0)
+                {
+                  fputs (quotearg_style (shell_escape_quoting_style, *argv),
+                         stdout);
+                  ++argv;
+                  --argc;
+                }
+              break;
+            }
+
           memset (ok, 0, sizeof ok);
           ok['a'] = ok['A'] = ok['c'] = ok['d'] = ok['e'] = ok['E'] =
             ok['f'] = ok['F'] = ok['g'] = ok['G'] = ok['i'] = ok['o'] =
@@ -533,7 +550,7 @@ print_formatted (const char *format, int argc, char **argv)
               default:
                 goto no_more_flag_characters;
               }
-        no_more_flag_characters:;
+        no_more_flag_characters:
 
           if (*f == '*')
             {
@@ -546,7 +563,7 @@ print_formatted (const char *format, int argc, char **argv)
                     field_width = width;
                   else
                     error (EXIT_FAILURE, 0, _("invalid field width: %s"),
-                           *argv);
+                           quote (*argv));
                   ++argv;
                   --argc;
                 }
@@ -581,7 +598,7 @@ print_formatted (const char *format, int argc, char **argv)
                         }
                       else if (INT_MAX < prec)
                         error (EXIT_FAILURE, 0, _("invalid precision: %s"),
-                               *argv);
+                               quote (*argv));
                       else
                         precision = prec;
                       ++argv;
@@ -658,12 +675,12 @@ main (int argc, char **argv)
         {
           version_etc (stdout, PROGRAM_NAME, PACKAGE_NAME, Version, AUTHORS,
                        (char *) NULL);
-          exit (EXIT_SUCCESS);
+          return EXIT_SUCCESS;
         }
     }
 
   /* The above handles --help and --version.
-     Since there is no other invocation of getopt, handle `--' here.  */
+     Since there is no other invocation of getopt, handle '--' here.  */
   if (1 < argc && STREQ (argv[1], "--"))
     {
       --argc;
@@ -693,5 +710,5 @@ main (int argc, char **argv)
            _("warning: ignoring excess arguments, starting with %s"),
            quote (argv[0]));
 
-  exit (exit_status);
+  return exit_status;
 }

@@ -1,5 +1,5 @@
 /* nproc - print the number of processors.
-   Copyright (C) 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -24,9 +24,10 @@
 #include "system.h"
 #include "error.h"
 #include "nproc.h"
-#include "xstrtol.h"
+#include "quote.h"
+#include "xdectoint.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "nproc"
 
 #define AUTHORS proper_name ("Giuseppe Scrivano")
@@ -50,8 +51,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]...\n"), program_name);
@@ -67,7 +67,7 @@ which may be less than the number of online processors\n\
 
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -102,16 +102,18 @@ main (int argc, char **argv)
           break;
 
         case IGNORE_OPTION:
-          if (xstrtoul (optarg, NULL, 10, &ignore, "") != LONGINT_OK)
-            {
-              error (0, 0, _("%s: invalid number to ignore"), optarg);
-              usage (EXIT_FAILURE);
-            }
+          ignore = xdectoumax (optarg, 0, ULONG_MAX, "", _("invalid number"),0);
           break;
 
         default:
           usage (EXIT_FAILURE);
         }
+    }
+
+  if (argc != optind)
+    {
+      error (0, 0, _("extra operand %s"), quote (argv[optind]));
+      usage (EXIT_FAILURE);
     }
 
   nproc = num_processors (mode);
@@ -123,5 +125,5 @@ main (int argc, char **argv)
 
   printf ("%lu\n", nproc);
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

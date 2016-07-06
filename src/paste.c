@@ -1,5 +1,5 @@
 /* paste - merge lines of files
-   Copyright (C) 1997-2005, 2008-2010 Free Software Foundation, Inc.
+   Copyright (C) 1997-2016 Free Software Foundation, Inc.
    Copyright (C) 1984 David M. Ihnat
 
    This program is free software: you can redistribute it and/or modify
@@ -32,7 +32,7 @@
                                 DELIM-LIST instead of tab to separate
                                 merged lines.  When DELIM-LIST is exhausted,
                                 start again at its beginning.
-   A FILE of `-' means standard input.
+   A FILE of '-' means standard input.
    If no FILEs are given, standard input is used. */
 
 #include <config.h>
@@ -43,9 +43,8 @@
 #include "system.h"
 #include "error.h"
 #include "fadvise.h"
-#include "quotearg.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "paste"
 
 #define AUTHORS \
@@ -62,16 +61,19 @@ static bool have_read_stdin;
    corresponding lines from each file in parallel. */
 static bool serial_merge;
 
-/* The delimeters between lines of input files (used cyclically). */
+/* The delimiters between lines of input files (used cyclically). */
 static char *delims;
 
-/* A pointer to the character after the end of `delims'. */
+/* A pointer to the character after the end of 'delims'. */
 static char const *delim_end;
+
+static unsigned char line_delim = '\n';
 
 static struct option const longopts[] =
 {
   {"serial", no_argument, NULL, 's'},
   {"delimiters", required_argument, NULL, 'd'},
+  {"zero-terminated", no_argument, NULL, 'z'},
   {GETOPT_HELP_OPTION_DECL},
   {GETOPT_VERSION_OPTION_DECL},
   {NULL, 0, NULL, 0}
@@ -145,7 +147,7 @@ collapse_escapes (char const *strptr)
         }
     }
 
- done:;
+ done:
 
   delim_end = strout;
   return backslash_at_end ? 1 : 0;
@@ -209,7 +211,7 @@ paste_parallel (size_t nfiles, char **fnamptr)
         {
           fileptr[files_open] = fopen (fnamptr[files_open], "r");
           if (fileptr[files_open] == NULL)
-            error (EXIT_FAILURE, errno, "%s", fnamptr[files_open]);
+            error (EXIT_FAILURE, errno, "%s", quotef (fnamptr[files_open]));
           else if (fileno (fileptr[files_open]) == STDIN_FILENO)
             opened_stdin = true;
           fadvise (fileptr[files_open], FADVISE_SEQUENTIAL);
@@ -228,14 +230,14 @@ paste_parallel (size_t nfiles, char **fnamptr)
       /* Set up for the next line. */
       bool somedone = false;
       char const *delimptr = delims;
-      size_t delims_saved = 0;	/* Number of delims saved in `delbuf'. */
+      size_t delims_saved = 0;	/* Number of delims saved in 'delbuf'. */
       size_t i;
 
       for (i = 0; i < nfiles && files_open; i++)
         {
           int chr IF_LINT ( = 0);	/* Input character. */
           int err IF_LINT ( = 0);	/* Input errno value.  */
-          size_t line_length = 0;	/* Number of chars in line. */
+          bool sometodo = false;	/* Input chars to process.  */
 
           if (fileptr[i])
             {
@@ -250,8 +252,8 @@ paste_parallel (size_t nfiles, char **fnamptr)
 
               while (chr != EOF)
                 {
-                  line_length++;
-                  if (chr == '\n')
+                  sometodo = true;
+                  if (chr == line_delim)
                     break;
                   xputchar (chr);
                   chr = getc (fileptr[i]);
@@ -259,7 +261,7 @@ paste_parallel (size_t nfiles, char **fnamptr)
                 }
             }
 
-          if (line_length == 0)
+          if (! sometodo)
             {
               /* EOF, read error, or closed file.
                  If an EOF or error, close the file.  */
@@ -267,14 +269,14 @@ paste_parallel (size_t nfiles, char **fnamptr)
                 {
                   if (ferror (fileptr[i]))
                     {
-                      error (0, err, "%s", fnamptr[i]);
+                      error (0, err, "%s", quotef (fnamptr[i]));
                       ok = false;
                     }
                   if (fileptr[i] == stdin)
                     clearerr (fileptr[i]); /* Also clear EOF. */
                   else if (fclose (fileptr[i]) == EOF)
                     {
-                      error (0, errno, "%s", fnamptr[i]);
+                      error (0, errno, "%s", quotef (fnamptr[i]));
                       ok = false;
                     }
 
@@ -296,13 +298,13 @@ paste_parallel (size_t nfiles, char **fnamptr)
                             write_error ();
                           delims_saved = 0;
                         }
-                      xputchar ('\n');
+                      xputchar (line_delim);
                     }
                   continue;	/* Next read of files, or exit. */
                 }
               else
                 {
-                  /* Closed file; add delimiter to `delbuf'. */
+                  /* Closed file; add delimiter to 'delbuf'. */
                   if (*delimptr != EMPTY_DELIM)
                     delbuf[delims_saved++] = *delimptr;
                   if (++delimptr == delim_end)
@@ -317,7 +319,7 @@ paste_parallel (size_t nfiles, char **fnamptr)
               /* Except for last file, replace last newline with delim. */
               if (i + 1 != nfiles)
                 {
-                  if (chr != '\n' && chr != EOF)
+                  if (chr != line_delim && chr != EOF)
                     xputchar (chr);
                   if (*delimptr != EMPTY_DELIM)
                     xputchar (*delimptr);
@@ -328,7 +330,7 @@ paste_parallel (size_t nfiles, char **fnamptr)
                 {
                   /* If the last line of the last file lacks a newline,
                      print one anyhow.  POSIX requires this.  */
-                  char c = (chr == EOF ? '\n' : chr);
+                  char c = (chr == EOF ? line_delim : chr);
                   xputchar (c);
                 }
             }
@@ -365,7 +367,7 @@ paste_serial (size_t nfiles, char **fnamptr)
           fileptr = fopen (*fnamptr, "r");
           if (fileptr == NULL)
             {
-              error (0, errno, "%s", *fnamptr);
+              error (0, errno, "%s", quotef (*fnamptr));
               ok = false;
               continue;
             }
@@ -378,16 +380,16 @@ paste_serial (size_t nfiles, char **fnamptr)
       saved_errno = errno;
       if (charold != EOF)
         {
-          /* `charold' is set up.  Hit it!
-             Keep reading characters, stashing them in `charnew';
-             output `charold', converting to the appropriate delimiter
-             character if needed.  After the EOF, output `charold'
+          /* 'charold' is set up.  Hit it!
+             Keep reading characters, stashing them in 'charnew';
+             output 'charold', converting to the appropriate delimiter
+             character if needed.  After the EOF, output 'charold'
              if it's a newline; otherwise, output it and then a newline. */
 
           while ((charnew = getc (fileptr)) != EOF)
             {
               /* Process the old character. */
-              if (charold == '\n')
+              if (charold == line_delim)
                 {
                   if (*delimptr != EMPTY_DELIM)
                     xputchar (*delimptr);
@@ -406,19 +408,19 @@ paste_serial (size_t nfiles, char **fnamptr)
           xputchar (charold);
         }
 
-      if (charold != '\n')
-        xputchar ('\n');
+      if (charold != line_delim)
+        xputchar (line_delim);
 
       if (ferror (fileptr))
         {
-          error (0, saved_errno, "%s", *fnamptr);
+          error (0, saved_errno, "%s", quotef (*fnamptr));
           ok = false;
         }
       if (is_stdin)
         clearerr (fileptr);	/* Also clear EOF. */
       else if (fclose (fileptr) == EOF)
         {
-          error (0, errno, "%s", *fnamptr);
+          error (0, errno, "%s", quotef (*fnamptr));
           ok = false;
         }
     }
@@ -429,8 +431,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -440,20 +441,22 @@ Usage: %s [OPTION]... [FILE]...\n\
       fputs (_("\
 Write lines consisting of the sequentially corresponding lines from\n\
 each FILE, separated by TABs, to standard output.\n\
-With no FILE, or when FILE is -, read standard input.\n\
-\n\
 "), stdout);
-      fputs (_("\
-Mandatory arguments to long options are mandatory for short options too.\n\
-"), stdout);
+
+      emit_stdin_note ();
+      emit_mandatory_arg_note ();
+
       fputs (_("\
   -d, --delimiters=LIST   reuse characters from LIST instead of TABs\n\
   -s, --serial            paste one file at a time instead of in parallel\n\
 "), stdout);
+      fputs (_("\
+  -z, --zero-terminated    line delimiter is NUL, not newline\n\
+"), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
       /* FIXME: add a couple of examples.  */
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -476,7 +479,7 @@ main (int argc, char **argv)
   have_read_stdin = false;
   serial_merge = false;
 
-  while ((optc = getopt_long (argc, argv, "d:s", longopts, NULL)) != -1)
+  while ((optc = getopt_long (argc, argv, "d:sz", longopts, NULL)) != -1)
     {
       switch (optc)
         {
@@ -487,6 +490,10 @@ main (int argc, char **argv)
 
         case 's':
           serial_merge = true;
+          break;
+
+        case 'z':
+          line_delim = '\0';
           break;
 
         case_GETOPT_HELP_CHAR;
@@ -503,12 +510,11 @@ main (int argc, char **argv)
 
   if (collapse_escapes (delim_arg))
     {
-      /* Don't use the default quoting style, because that would double the
+      /* Don't use the quote() quoting style, because that would double the
          number of displayed backslashes, making the diagnostic look bogus.  */
-      set_quoting_style (NULL, escape_quoting_style);
       error (EXIT_FAILURE, 0,
              _("delimiter list ends with an unescaped backslash: %s"),
-             quotearg_colon (delim_arg));
+             quotearg_n_style_colon (0, c_maybe_quoting_style, delim_arg));
     }
 
   if (!serial_merge)
@@ -520,5 +526,5 @@ main (int argc, char **argv)
 
   if (have_read_stdin && fclose (stdin) == EOF)
     error (EXIT_FAILURE, errno, "-");
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

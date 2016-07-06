@@ -1,6 +1,6 @@
 /* mgetgroups.c -- return a list of the groups a user or current process is in
 
-   Copyright (C) 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 2007-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,7 +31,13 @@
 #endif
 
 #include "getugroups.h"
-#include "xalloc.h"
+#include "xalloc-oversized.h"
+
+/* Work around an incompatibility of OS X 10.11: getgrouplist
+   accepts int *, not gid_t *, and int and gid_t differ in sign.  */
+#if 4 < __GNUC__ + (3 <= __GNUC_MINOR__)
+# pragma GCC diagnostic ignored "-Wpointer-sign"
+#endif
 
 static gid_t *
 realloc_groupbuf (gid_t *g, size_t num)
@@ -133,7 +139,7 @@ mgetgroups (char const *username, gid_t gid, gid_t **groups)
       return -1;
     }
 
-  if (!username && gid != (gid_t) -1)
+  if (max_n_groups == 0 || (!username && gid != (gid_t) -1))
     max_n_groups++;
   g = realloc_groupbuf (NULL, max_n_groups);
   if (g == NULL)
@@ -192,15 +198,4 @@ mgetgroups (char const *username, gid_t gid, gid_t **groups)
     }
 
   return ng;
-}
-
-/* Like mgetgroups, but call xalloc_die on allocation failure.  */
-
-int
-xgetgroups (char const *username, gid_t gid, gid_t **groups)
-{
-  int result = mgetgroups (username, gid, groups);
-  if (result == -1 && errno == ENOMEM)
-    xalloc_die ();
-  return result;
 }
