@@ -1,5 +1,5 @@
 /* seq - print sequence of numbers to standard output.
-   Copyright (C) 1994-2010 Free Software Foundation, Inc.
+   Copyright (C) 1994-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
 # define isfinite(x) ((x) * 0 == 0)
 #endif
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "seq"
 
 #define AUTHORS proper_name ("Ulrich Drepper")
@@ -46,7 +46,6 @@ static char const *separator;
 
 /* The string output after all numbers have been output.
    Usually "\n" or "\0".  */
-/* FIXME: make this an option.  */
 static char const terminator[] = "\n";
 
 static struct option const long_options[] =
@@ -63,8 +62,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -74,7 +72,11 @@ Usage: %s [OPTION]... LAST\n\
 "), program_name, program_name, program_name);
       fputs (_("\
 Print numbers from FIRST to LAST, in steps of INCREMENT.\n\
-\n\
+"), stdout);
+
+      emit_mandatory_arg_note ();
+
+      fputs (_("\
   -f, --format=FORMAT      use printf style floating-point FORMAT\n\
   -s, --separator=STRING   use STRING to separate numbers (default: \\n)\n\
   -w, --equal-width        equalize width by padding with leading zeroes\n\
@@ -85,16 +87,18 @@ Print numbers from FIRST to LAST, in steps of INCREMENT.\n\
 \n\
 If FIRST or INCREMENT is omitted, it defaults to 1.  That is, an\n\
 omitted INCREMENT defaults to 1 even when LAST is smaller than FIRST.\n\
+The sequence of numbers ends when the sum of the current number and\n\
+INCREMENT would become greater than LAST.\n\
 FIRST, INCREMENT, and LAST are interpreted as floating point values.\n\
 INCREMENT is usually positive if FIRST is smaller than LAST, and\n\
 INCREMENT is usually negative if FIRST is greater than LAST.\n\
 "), stdout);
       fputs (_("\
-FORMAT must be suitable for printing one argument of type `double';\n\
+FORMAT must be suitable for printing one argument of type 'double';\n\
 it defaults to %.PRECf if FIRST, INCREMENT, and LAST are all fixed point\n\
 decimal numbers with maximum precision PREC, and to %g otherwise.\n\
 "), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -135,7 +139,7 @@ scan_arg (const char *arg)
 
   if (! xstrtold (arg, NULL, &ret.value, c_strtold))
     {
-      error (0, 0, _("invalid floating point argument: %s"), arg);
+      error (0, 0, _("invalid floating point argument: %s"), quote (arg));
       usage (EXIT_FAILURE);
     }
 
@@ -143,17 +147,24 @@ scan_arg (const char *arg)
   while (isspace (to_uchar (*arg)) || *arg == '+')
     arg++;
 
-  ret.width = strlen (arg);
+  /* Default to auto width and precision.  */
+  ret.width = 0;
   ret.precision = INT_MAX;
 
+  /* Use no precision (and possibly fast generation) for integers.  */
+  char const *decimal_point = strchr (arg, '.');
+  if (! decimal_point && ! strchr (arg, 'p') /* not a hex float */)
+    ret.precision = 0;
+
+  /* auto set width and precision for decimal inputs.  */
   if (! arg[strcspn (arg, "xX")] && isfinite (ret.value))
     {
-      char const *decimal_point = strchr (arg, '.');
-      if (! decimal_point)
-        ret.precision = 0;
-      else
+      size_t fraction_len = 0;
+      ret.width = strlen (arg);
+
+      if (decimal_point)
         {
-          size_t fraction_len = strcspn (decimal_point + 1, "eE");
+          fraction_len = strcspn (decimal_point + 1, "eE");
           if (fraction_len <= INT_MAX)
             ret.precision = fraction_len;
           ret.width += (fraction_len == 0                      /* #.  -> #   */
@@ -167,7 +178,29 @@ scan_arg (const char *arg)
       if (e)
         {
           long exponent = strtol (e + 1, NULL, 10);
-          ret.precision += exponent < 0 ? -exponent : 0;
+          ret.precision += exponent < 0 ? -exponent
+                                        : - MIN (ret.precision, exponent);
+          /* Don't account for e.... in the width since this is not output.  */
+          ret.width -= strlen (arg) - (e - arg);
+          /* Adjust the width as per the exponent.  */
+          if (exponent < 0)
+            {
+              if (decimal_point)
+                {
+                  if (e == decimal_point + 1) /* undo #. -> # above  */
+                    ret.width++;
+                }
+              else
+                ret.width++;
+              exponent = -exponent;
+            }
+          else
+            {
+              if (decimal_point && ret.precision == 0 && fraction_len)
+                ret.width--; /* discount space for '.'  */
+              exponent -= MIN (fraction_len, exponent);
+            }
+          ret.width += exponent;
         }
     }
 
@@ -319,6 +352,8 @@ get_default_format (operand first, operand step, operand last)
             last_width--;  /* don't include space for '.' */
           if (last.precision == 0 && prec)
             last_width++;  /* include space for '.' */
+          if (first.precision == 0 && prec)
+            first_width++;  /* include space for '.' */
           size_t width = MAX (first_width, last_width);
           if (width <= INT_MAX)
             {
@@ -335,6 +370,154 @@ get_default_format (operand first, operand step, operand last)
     }
 
   return "%Lg";
+}
+
+/* The NUL-terminated string S0 of length S_LEN represents a valid
+   non-negative decimal integer.  Adjust the string and length so
+   that the pair describe the next-larger value.  */
+static void
+incr (char **s0, size_t *s_len)
+{
+  char *s = *s0;
+  char *endp = s + *s_len - 1;
+
+  do
+    {
+      if ((*endp)++ < '9')
+        return;
+      *endp-- = '0';
+    }
+  while (endp >= s);
+  *--(*s0) = '1';
+  ++*s_len;
+}
+
+/* Compare A and B (each a NUL-terminated digit string), with lengths
+   given by A_LEN and B_LEN.  Return +1 if A < B, -1 if B < A, else 0.  */
+static int
+cmp (char const *a, size_t a_len, char const *b, size_t b_len)
+{
+  if (a_len < b_len)
+    return -1;
+  if (b_len < a_len)
+    return 1;
+  return (strcmp (a, b));
+}
+
+/* Trim leading 0's from S, but if S is all 0's, leave one.
+   Return a pointer to the trimmed string.  */
+static char const * _GL_ATTRIBUTE_PURE
+trim_leading_zeros (char const *s)
+{
+  char const *p = s;
+  while (*s == '0')
+    ++s;
+
+  /* If there were only 0's, back up, to leave one.  */
+  if (!*s && s != p)
+    --s;
+  return s;
+}
+
+/* Print all whole numbers from A to B, inclusive -- to stdout, each
+   followed by a newline.  If B < A, return false and print nothing.
+   Otherwise, return true.  */
+static bool
+seq_fast (char const *a, char const *b)
+{
+  bool inf = STREQ (b, "inf");
+
+  /* Skip past any leading 0's.  Without this, our naive cmp
+     function would declare 000 to be larger than 99.  */
+  a = trim_leading_zeros (a);
+  b = trim_leading_zeros (b);
+
+  size_t p_len = strlen (a);
+  size_t q_len = inf ? 0 : strlen (b);
+
+  /* Allow for at least 31 digits without realloc.
+     1 more than p_len is needed for the inf case.  */
+  size_t inc_size = MAX (MAX (p_len + 1, q_len), 31);
+
+  /* Copy input strings (incl NUL) to end of new buffers.  */
+  char *p0 = xmalloc (inc_size + 1);
+  char *p = memcpy (p0 + inc_size - p_len, a, p_len + 1);
+  char *q;
+  char *q0;
+  if (! inf)
+    {
+      q0 = xmalloc (inc_size + 1);
+      q = memcpy (q0 + inc_size - q_len, b, q_len + 1);
+    }
+  else
+    q = q0 = NULL;
+
+  bool ok = inf || cmp (p, p_len, q, q_len) <= 0;
+  if (ok)
+    {
+      /* Reduce number of fwrite calls which is seen to
+         give a speed-up of more than 2x over the unbuffered code
+         when printing the first 10^9 integers.  */
+      size_t buf_size = MAX (BUFSIZ, (inc_size + 1) * 2);
+      char *buf = xmalloc (buf_size);
+      char const *buf_end = buf + buf_size;
+
+      char *bufp = buf;
+
+      /* Write first number to buffer.  */
+      bufp = mempcpy (bufp, p, p_len);
+
+      /* Append separator then number.  */
+      while (inf || cmp (p, p_len, q, q_len) < 0)
+        {
+          *bufp++ = *separator;
+          incr (&p, &p_len);
+
+          /* Double up the buffers when needed for the inf case.  */
+          if (p_len == inc_size)
+            {
+              inc_size *= 2;
+              p0 = xrealloc (p0, inc_size + 1);
+              p = memmove (p0 + p_len, p0, p_len + 1);
+
+              if (buf_size < (inc_size + 1) * 2)
+                {
+                  size_t buf_offset = bufp - buf;
+                  buf_size = (inc_size + 1) * 2;
+                  buf = xrealloc (buf, buf_size);
+                  buf_end = buf + buf_size;
+                  bufp = buf + buf_offset;
+                }
+            }
+
+          bufp = mempcpy (bufp, p, p_len);
+          /* If no place for another separator + number then
+             output buffer so far, and reset to start of buffer.  */
+          if (buf_end - (p_len + 1) < bufp)
+            {
+              fwrite (buf, bufp - buf, 1, stdout);
+              bufp = buf;
+            }
+        }
+
+      /* Write any remaining buffered output, and the terminator.  */
+      *bufp++ = *terminator;
+      fwrite (buf, bufp - buf, 1, stdout);
+
+      IF_LINT (free (buf));
+    }
+
+  free (p0);
+  free (q0);
+  return ok;
+}
+
+/* Return true if S consists of at least one digit and no non-digits.  */
+static bool _GL_ATTRIBUTE_PURE
+all_digits_p (char const *s)
+{
+  size_t n = strlen (s);
+  return ISDIGIT (s[0]) && n == strspn (s, "0123456789");
 }
 
 int
@@ -399,13 +582,14 @@ main (int argc, char **argv)
         }
     }
 
-  if (argc - optind < 1)
+  unsigned int n_args = argc - optind;
+  if (n_args < 1)
     {
       error (0, 0, _("missing operand"));
       usage (EXIT_FAILURE);
     }
 
-  if (3 < argc - optind)
+  if (3 < n_args)
     {
       error (0, 0, _("extra operand %s"), quote (argv[optind + 3]));
       usage (EXIT_FAILURE);
@@ -413,6 +597,33 @@ main (int argc, char **argv)
 
   if (format_str)
     format_str = long_double_format (format_str, &layout);
+
+  if (format_str != NULL && equal_width)
+    {
+      error (0, 0, _("format string may not be specified"
+                     " when printing equal width strings"));
+      usage (EXIT_FAILURE);
+    }
+
+  /* If the following hold:
+     - no format string, [FIXME: relax this, eventually]
+     - integer start (or no start)
+     - integer end
+     - increment == 1 or not specified [FIXME: relax this, eventually]
+     then use the much more efficient integer-only code.  */
+  if (all_digits_p (argv[optind])
+      && (n_args == 1 || all_digits_p (argv[optind + 1]))
+      && (n_args < 3 || (STREQ ("1", argv[optind + 1])
+                         && all_digits_p (argv[optind + 2])))
+      && !equal_width && !format_str && strlen (separator) == 1)
+    {
+      char const *s1 = n_args == 1 ? "1" : argv[optind];
+      char const *s2 = argv[optind + (n_args - 1)];
+      if (seq_fast (s1, s2))
+        return EXIT_SUCCESS;
+
+      /* Upon any failure, let the more general code deal with it.  */
+    }
 
   last = scan_arg (argv[optind++]);
 
@@ -428,11 +639,30 @@ main (int argc, char **argv)
         }
     }
 
-  if (format_str != NULL && equal_width)
+  if ((isfinite (first.value) && first.precision == 0)
+      && step.precision == 0 && last.precision == 0
+      && 0 <= first.value && step.value == 1 && 0 <= last.value
+      && !equal_width && !format_str && strlen (separator) == 1)
     {
-      error (0, 0, _("\
-format string may not be specified when printing equal width strings"));
-      usage (EXIT_FAILURE);
+      char *s1;
+      char *s2;
+      if (asprintf (&s1, "%0.Lf", first.value) < 0)
+        xalloc_die ();
+      if (! isfinite (last.value))
+        s2 = xstrdup ("inf"); /* Ensure "inf" is used.  */
+      else if (asprintf (&s2, "%0.Lf", last.value) < 0)
+        xalloc_die ();
+
+      if (*s1 != '-' && *s2 != '-' && seq_fast (s1, s2))
+        {
+          IF_LINT (free (s1));
+          IF_LINT (free (s2));
+          return EXIT_SUCCESS;
+        }
+
+      free (s1);
+      free (s2);
+      /* Upon any failure, let the more general code deal with it.  */
     }
 
   if (format_str == NULL)
@@ -440,5 +670,5 @@ format string may not be specified when printing equal width strings"));
 
   print_numbers (format_str, layout, first.value, step.value, last.value);
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

@@ -1,6 +1,6 @@
 /* Unicode character output to streams with locale dependent encoding.
 
-   Copyright (C) 2000-2003, 2006, 2008-2010 Free Software Foundation, Inc.
+   Copyright (C) 2000-2003, 2006, 2008-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -38,7 +38,6 @@
 
 #include "localcharset.h"
 #include "unistr.h"
-#include "ignore-value.h"
 
 /* When we pass a Unicode character to iconv(), we must pass it in a
    suitable encoding. The standardized Unicode encodings are
@@ -140,7 +139,9 @@ unicode_to_mb (unsigned int code,
 
       /* Avoid glibc-2.1 bug and Solaris 7 bug.  */
 # if defined _LIBICONV_VERSION \
-    || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+    || !(((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) \
+          && !defined __UCLIBC__) \
+         || defined __sun)
 
       /* Get back to the initial shift state.  */
       res = iconv (utf8_to_local, NULL, NULL, &outptr, &outbytesleft);
@@ -167,7 +168,7 @@ fwrite_success_callback (const char *buf, size_t buflen, void *callback_arg)
      conditions (STREAM is an open stream and not wide-character oriented)
      when fwrite() returns a value != buflen it also sets STREAM's error
      indicator.  */
-  ignore_value (fwrite (buf, 1, buflen, stream));
+  fwrite (buf, 1, buflen, stream);
   return 0;
 }
 

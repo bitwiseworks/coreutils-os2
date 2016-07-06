@@ -1,6 +1,5 @@
 /* sum -- checksum and count the blocks in a file
-   Copyright (C) 1986, 1989, 1991, 1995-2002, 2004-2005, 2008-2010 Free
-   Software Foundation, Inc.
+   Copyright (C) 1986-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,7 +30,7 @@
 #include "safe-read.h"
 #include "xfreopen.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "sum"
 
 #define AUTHORS \
@@ -53,8 +52,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -63,17 +61,18 @@ Usage: %s [OPTION]... [FILE]...\n\
               program_name);
       fputs (_("\
 Print checksum and block counts for each FILE.\n\
+"), stdout);
+
+      emit_stdin_note ();
+
+      fputs (_("\
 \n\
   -r              use BSD sum algorithm, use 1K blocks\n\
   -s, --sysv      use System V sum algorithm, use 512 bytes blocks\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      fputs (_("\
-\n\
-With no FILE, or when FILE is -, read standard input.\n\
-"), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -106,7 +105,7 @@ bsd_sum_file (const char *file, int print_name)
       fp = fopen (file, (O_BINARY ? "rb" : "r"));
       if (fp == NULL)
         {
-          error (0, errno, "%s", file);
+          error (0, errno, "%s", quotef (file));
           return false;
         }
     }
@@ -123,7 +122,7 @@ bsd_sum_file (const char *file, int print_name)
 
   if (ferror (fp))
     {
-      error (0, errno, "%s", file);
+      error (0, errno, "%s", quotef (file));
       if (!is_stdin)
         fclose (fp);
       return false;
@@ -131,7 +130,7 @@ bsd_sum_file (const char *file, int print_name)
 
   if (!is_stdin && fclose (fp) != 0)
     {
-      error (0, errno, "%s", file);
+      error (0, errno, "%s", quotef (file));
       return false;
     }
 
@@ -176,7 +175,7 @@ sysv_sum_file (const char *file, int print_name)
       fd = open (file, O_RDONLY | O_BINARY);
       if (fd == -1)
         {
-          error (0, errno, "%s", file);
+          error (0, errno, "%s", quotef (file));
           return false;
         }
     }
@@ -191,7 +190,7 @@ sysv_sum_file (const char *file, int print_name)
 
       if (bytes_read == SAFE_READ_ERROR)
         {
-          error (0, errno, "%s", file);
+          error (0, errno, "%s", quotef (file));
           if (!is_stdin)
             close (fd);
           return false;
@@ -204,7 +203,7 @@ sysv_sum_file (const char *file, int print_name)
 
   if (!is_stdin && close (fd) != 0)
     {
-      error (0, errno, "%s", file);
+      error (0, errno, "%s", quotef (file));
       return false;
     }
 
@@ -271,6 +270,6 @@ main (int argc, char **argv)
       ok &= sum_func (argv[optind], files_given);
 
   if (have_read_stdin && fclose (stdin) == EOF)
-    error (EXIT_FAILURE, errno, "-");
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+    error (EXIT_FAILURE, errno, "%s", quotef ("-"));
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

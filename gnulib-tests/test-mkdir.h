@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Test of mkdir() function.
-   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -35,7 +33,7 @@ test_mkdir (int (*func) (char const *, mode_t), bool print)
   ASSERT (errno == ENOTDIR || errno == EEXIST);
   errno = 0;
   ASSERT (func (BASE "file/dir", 0700) == -1);
-  ASSERT (errno == ENOTDIR || errno == ENOENT);
+  ASSERT (errno == ENOTDIR || errno == ENOENT || errno == EOPNOTSUPP);
   ASSERT (unlink (BASE "file") == 0);
   errno = 0;
   ASSERT (func ("", 0700) == -1);

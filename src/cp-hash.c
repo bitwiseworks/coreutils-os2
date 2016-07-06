@@ -1,5 +1,5 @@
 /* cp-hash.c  -- file copying (hash search routines)
-   Copyright (C) 1989-1991, 1995-2010 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,7 +22,6 @@
 #include <sys/types.h>
 #include "system.h"
 
-#include "same.h"
 #include "hash.h"
 #include "cp-hash.h"
 
@@ -60,7 +59,7 @@ src_to_dest_hash (void const *x, size_t table_size)
 }
 
 /* Compare two Src_to_dest entries.
-   Return true if their keys are judged `equal'.  */
+   Return true if their keys are judged 'equal'.  */
 static bool
 src_to_dest_compare (void const *x, void const *y)
 {
@@ -132,7 +131,7 @@ remember_copied (const char *name, ino_t ino, dev_t dev)
 
   /* Determine whether there was already an entry in the table
      with a matching key.  If so, free ENT (it wasn't inserted) and
-     return the `name' from the table entry.  */
+     return the 'name' from the table entry.  */
   if (ent_from_table != ent)
     {
       src_to_dest_free (ent);
@@ -155,7 +154,7 @@ hash_init (void)
     xalloc_die ();
 }
 
-/* Reset the hash structure in the global variable `htab' to
+/* Reset the hash structure in the global variable 'htab' to
    contain no entries.  */
 
 extern void

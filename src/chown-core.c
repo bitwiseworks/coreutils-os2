@@ -1,5 +1,5 @@
 /* chown-core.c -- core functions for changing ownership.
-   Copyright (C) 2000, 2002-2010 Free Software Foundation, Inc.
+   Copyright (C) 2000-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@
 #include "chown-core.h"
 #include "error.h"
 #include "ignore-value.h"
-#include "quote.h"
 #include "root-dev-ino.h"
 #include "xfts.h"
 
@@ -68,7 +67,7 @@ chopt_init (struct Chown_option *chopt)
 }
 
 extern void
-chopt_free (struct Chown_option *chopt ATTRIBUTE_UNUSED)
+chopt_free (struct Chown_option *chopt _GL_UNUSED)
 {
   /* Deliberately do not free chopt->user_name or ->group_name.
      They're not always allocated.  */
@@ -102,54 +101,79 @@ uid_to_name (uid_t uid)
                   : umaxtostr (uid, buf));
 }
 
+/* Allocate a string representing USER and GROUP.  */
+
+static char *
+user_group_str (char const *user, char const *group)
+{
+  char *spec = NULL;
+
+  if (user)
+    {
+      if (group)
+        {
+          spec = xmalloc (strlen (user) + 1 + strlen (group) + 1);
+          stpcpy (stpcpy (stpcpy (spec, user), ":"), group);
+        }
+      else
+        {
+          spec = xstrdup (user);
+        }
+    }
+  else if (group)
+    {
+      spec = xstrdup (group);
+    }
+
+  return spec;
+}
+
 /* Tell the user how/if the user and group of FILE have been changed.
    If USER is NULL, give the group-oriented messages.
    CHANGED describes what (if anything) has happened. */
 
 static void
 describe_change (const char *file, enum Change_status changed,
+                 char const *old_user, char const *old_group,
                  char const *user, char const *group)
 {
   const char *fmt;
-  char const *spec;
-  char *spec_allocated = NULL;
+  char *old_spec;
+  char *spec;
 
   if (changed == CH_NOT_APPLIED)
     {
       printf (_("neither symbolic link %s nor referent has been changed\n"),
-              quote (file));
+              quoteaf (file));
       return;
     }
 
-  if (user)
-    {
-      if (group)
-        {
-          spec_allocated = xmalloc (strlen (user) + 1 + strlen (group) + 1);
-          stpcpy (stpcpy (stpcpy (spec_allocated, user), ":"), group);
-          spec = spec_allocated;
-        }
-      else
-        {
-          spec = user;
-        }
-    }
-  else
-    {
-      spec = group;
-    }
+  spec = user_group_str (user, group);
+  old_spec = user_group_str (user ? old_user : NULL, group ? old_group : NULL);
 
   switch (changed)
     {
     case CH_SUCCEEDED:
-      fmt = (user ? _("changed ownership of %s to %s\n")
-             : group ? _("changed group of %s to %s\n")
+      fmt = (user ? _("changed ownership of %s from %s to %s\n")
+             : group ? _("changed group of %s from %s to %s\n")
              : _("no change to ownership of %s\n"));
       break;
     case CH_FAILED:
-      fmt = (user ? _("failed to change ownership of %s to %s\n")
-             : group ? _("failed to change group of %s to %s\n")
-             : _("failed to change ownership of %s\n"));
+      if (old_spec)
+        {
+          fmt = (user ? _("failed to change ownership of %s from %s to %s\n")
+                 : group ? _("failed to change group of %s from %s to %s\n")
+                 : _("failed to change ownership of %s\n"));
+        }
+      else
+        {
+          fmt = (user ? _("failed to change ownership of %s to %s\n")
+                 : group ? _("failed to change group of %s to %s\n")
+                 : _("failed to change ownership of %s\n"));
+          free (old_spec);
+          old_spec = spec;
+          spec = NULL;
+        }
       break;
     case CH_NO_CHANGE_REQUESTED:
       fmt = (user ? _("ownership of %s retained as %s\n")
@@ -160,16 +184,17 @@ describe_change (const char *file, enum Change_status changed,
       abort ();
     }
 
-  printf (fmt, quote (file), spec);
+  printf (fmt, quoteaf (file), old_spec, spec);
 
-  free (spec_allocated);
+  free (old_spec);
+  free (spec);
 }
 
 /* Change the owner and/or group of the FILE to UID and/or GID (safely)
    only if REQUIRED_UID and REQUIRED_GID match the owner and group IDs
-   of FILE.  ORIG_ST must be the result of `stat'ing FILE.
+   of FILE.  ORIG_ST must be the result of 'stat'ing FILE.
 
-   The `safely' part above means that we can't simply use chown(2),
+   The 'safely' part above means that we can't simply use chown(2),
    since FILE might be replaced with some other file between the time
    of the preceding stat/lstat and this chown call.  So here we open
    FILE and do everything else via the resulting file descriptor.
@@ -230,12 +255,10 @@ restricted_chown (int cwd_fd, char const *file,
         }
     }
 
-  { /* FIXME: remove these curly braces when we assume C99.  */
-    int saved_errno = errno;
-    close (fd);
-    errno = saved_errno;
-    return status;
-  }
+  int saved_errno = errno;
+  close (fd);
+  errno = saved_errno;
+  return status;
 }
 
 /* Change the owner and/or group of the file specified by FTS and ENT
@@ -271,7 +294,7 @@ change_file_owner (FTS *fts, FTSENT *ent,
               /* Tell fts not to traverse into this hierarchy.  */
               fts_set (fts, ent, FTS_SKIP);
               /* Ensure that we do not process "/" on the second visit.  */
-              ignore_ptr (fts_read (fts));
+              ignore_value (fts_read (fts));
               return false;
             }
           return true;
@@ -299,20 +322,20 @@ change_file_owner (FTS *fts, FTSENT *ent,
         }
       if (! chopt->force_silent)
         error (0, ent->fts_errno, _("cannot access %s"),
-               quote (file_full_name));
+               quoteaf (file_full_name));
       ok = false;
       break;
 
     case FTS_ERR:
       if (! chopt->force_silent)
-        error (0, ent->fts_errno, "%s", quote (file_full_name));
+        error (0, ent->fts_errno, "%s", quotef (file_full_name));
       ok = false;
       break;
 
     case FTS_DNR:
       if (! chopt->force_silent)
         error (0, ent->fts_errno, _("cannot read directory %s"),
-               quote (file_full_name));
+               quoteaf (file_full_name));
       ok = false;
       break;
 
@@ -353,7 +376,7 @@ change_file_owner (FTS *fts, FTSENT *ent,
             {
               if (! chopt->force_silent)
                 error (0, errno, _("cannot dereference %s"),
-                       quote (file_full_name));
+                       quoteaf (file_full_name));
               ok = false;
             }
 
@@ -432,7 +455,7 @@ change_file_owner (FTS *fts, FTSENT *ent,
         }
 
       /* On some systems (e.g., GNU/Linux 2.4.x),
-         the chown function resets the `special' permission bits.
+         the chown function resets the 'special' permission bits.
          Do *not* restore those bits;  doing so would open a window in
          which a malicious user, M, could subvert a chown command run
          by some other user and operating on files in a directory
@@ -442,7 +465,7 @@ change_file_owner (FTS *fts, FTSENT *ent,
         error (0, errno, (uid != (uid_t) -1
                           ? _("changing ownership of %s")
                           : _("changing group of %s")),
-               quote (file_full_name));
+               quoteaf (file_full_name));
     }
 
   if (chopt->verbosity != V_off)
@@ -459,8 +482,13 @@ change_file_owner (FTS *fts, FTSENT *ent,
              : !symlink_changed ? CH_NOT_APPLIED
              : !changed ? CH_NO_CHANGE_REQUESTED
              : CH_SUCCEEDED);
+          char *old_usr = file_stats ? uid_to_name (file_stats->st_uid) : NULL;
+          char *old_grp = file_stats ? gid_to_name (file_stats->st_gid) : NULL;
           describe_change (file_full_name, ch_status,
+                           old_usr, old_grp,
                            chopt->user_name, chopt->group_name);
+          free (old_usr);
+          free (old_grp);
         }
     }
 

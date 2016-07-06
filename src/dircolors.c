@@ -1,5 +1,5 @@
 /* dircolors - output commands to set the LS_COLOR environment variable
-   Copyright (C) 1996-2010 Free Software Foundation, Inc.
+   Copyright (C) 1996-2016 Free Software Foundation, Inc.
    Copyright (C) 1994, 1995, 1997, 1998, 1999, 2000 H. Peter Anvin
 
    This program is free software: you can redistribute it and/or modify
@@ -18,6 +18,7 @@
 #include <config.h>
 
 #include <sys/types.h>
+#include <fnmatch.h>
 #include <getopt.h>
 
 #include "system.h"
@@ -29,7 +30,7 @@
 #include "stdio--.h"
 #include "xstrndup.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "dircolors"
 
 #define AUTHORS proper_name ("H. Peter Anvin")
@@ -91,8 +92,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]... [FILE]\n"), program_name);
@@ -110,15 +110,15 @@ Determine format of output:\n\
 \n\
 If FILE is specified, read it to determine which colors to use for which\n\
 file types and extensions.  Otherwise, a precompiled database is used.\n\
-For details on the format of these files, run `dircolors --print-database'.\n\
+For details on the format of these files, run 'dircolors --print-database'.\n\
 "), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
 
   exit (status);
 }
 
-/* If the SHELL environment variable is set to `csh' or `tcsh,'
+/* If the SHELL environment variable is set to 'csh' or 'tcsh,'
    assume C shell.  Else Bourne shell.  */
 
 static enum Shell_syntax
@@ -228,7 +228,7 @@ append_quoted (const char *str)
 }
 
 /* Read the file open on FP (with name FILENAME).  First, look for a
-   `TERM name' directive where name matches the current terminal type.
+   'TERM name' directive where name matches the current terminal type.
    Once found, translate and accumulate the associated directives onto
    the global obstack LSC_OBSTACK.  Give a diagnostic
    upon failure (unrecognized keyword is the only way to fail here).
@@ -285,7 +285,7 @@ dc_parse_stream (FILE *fp, const char *filename)
       if (arg == NULL)
         {
           error (0, 0, _("%s:%lu: invalid line;  missing second token"),
-                 filename, (unsigned long int) line_number);
+                 quotef (filename), (unsigned long int) line_number);
           ok = false;
           free (keywd);
           continue;
@@ -294,7 +294,7 @@ dc_parse_stream (FILE *fp, const char *filename)
       unrecognized = false;
       if (c_strcasecmp (keywd, "TERM") == 0)
         {
-          if (STREQ (arg, term))
+          if (fnmatch (arg, term, 0) == 0)
             state = ST_TERMSURE;
           else if (state != ST_TERMSURE)
             state = ST_TERMNO;
@@ -357,7 +357,7 @@ dc_parse_stream (FILE *fp, const char *filename)
       if (unrecognized && (state == ST_TERMSURE || state == ST_TERMYES))
         {
           error (0, 0, _("%s:%lu: unrecognized keyword %s"),
-                 (filename ? quote (filename) : _("<internal>")),
+                 (filename ? quotef (filename) : _("<internal>")),
                  (unsigned long int) line_number, keywd);
           ok = false;
         }
@@ -376,7 +376,7 @@ dc_parse_file (const char *filename)
 
   if (! STREQ (filename, "-") && freopen (filename, "r", stdin) == NULL)
     {
-      error (0, errno, "%s", filename);
+      error (0, errno, "%s", quotef (filename));
       return false;
     }
 
@@ -384,7 +384,7 @@ dc_parse_file (const char *filename)
 
   if (fclose (stdin) != 0)
     {
-      error (0, errno, "%s", quote (filename));
+      error (0, errno, "%s", quotef (filename));
       return false;
     }
 
@@ -438,12 +438,12 @@ main (int argc, char **argv)
   if (print_database && syntax != SHELL_SYNTAX_UNKNOWN)
     {
       error (0, 0,
-             _("the options to output dircolors' internal database and\n\
-to select a shell syntax are mutually exclusive"));
+             _("the options to output dircolors' internal database and\n"
+               "to select a shell syntax are mutually exclusive"));
       usage (EXIT_FAILURE);
     }
 
-  if (!print_database < argc)
+  if ((!print_database) < argc)
     {
       error (0, 0, _("extra operand %s"), quote (argv[!print_database]));
       if (print_database)
@@ -456,7 +456,7 @@ to select a shell syntax are mutually exclusive"));
   if (print_database)
     {
       char const *p = G_line;
-      while (p < G_line + sizeof G_line)
+      while (p - G_line < sizeof G_line)
         {
           puts (p);
           p += strlen (p) + 1;
@@ -504,5 +504,5 @@ to select a shell syntax are mutually exclusive"));
         }
     }
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

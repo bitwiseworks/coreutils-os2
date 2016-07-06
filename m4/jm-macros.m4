@@ -2,7 +2,7 @@
 
 dnl Misc type-related macros for coreutils.
 
-# Copyright (C) 1998, 2000-2010 Free Software Foundation, Inc.
+# Copyright (C) 1998-2016 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,66 +41,88 @@ AC_DEFUN([coreutils_MACROS],
   AC_DEFINE([ARGMATCH_DIE_DECL], [void usage (int _e)],
             [Define to the declaration of the xargmatch failure function.])
 
-  # used by ls
-  AC_REQUIRE([gl_CLOCK_TIME])
   # used by shred
   AC_CHECK_FUNCS_ONCE([directio])
 
-  # Used by install.c.
   coreutils_saved_libs=$LIBS
     LIBS="$LIBS $LIB_SELINUX"
+    # Used by selinux.c.
+    AC_CHECK_FUNCS([mode_to_security_class], [], [])
+    # Used by install.c.
     AC_CHECK_FUNCS([matchpathcon_init_prefix], [],
     [
-      case "$ac_cv_search_setfilecon:$ac_cv_header_selinux_selinux_h" in
-        no:*) # SELinux disabled
-          ;;
-        *:no) # SELinux disabled
-          ;;
-        *)
-        AC_MSG_WARN([SELinux enabled, but matchpathcon_init_prefix not found])
-        AC_MSG_WARN([The install utility may run slowly])
-      esac
+      if test "$with_selinux" != no; then
+        case "$ac_cv_search_setfilecon:$ac_cv_header_selinux_selinux_h" in
+          no:*) # SELinux disabled
+            ;;
+          *:no) # SELinux disabled
+            ;;
+          *)
+          AC_MSG_WARN([SELinux enabled, but matchpathcon_init_prefix not found])
+          AC_MSG_WARN([The install utility may run slowly])
+        esac
+      fi
     ])
   LIBS=$coreutils_saved_libs
 
   # Used by sort.c.
   AC_CHECK_FUNCS_ONCE([nl_langinfo])
+  # Used by timeout.c
+  AC_CHECK_FUNCS_ONCE([setrlimit prctl])
 
   # Used by tail.c.
   AC_CHECK_FUNCS([inotify_init],
     [AC_DEFINE([HAVE_INOTIFY], [1],
      [Define to 1 if you have usable inotify support.])])
 
-  AC_CHECK_FUNCS_ONCE( \
-    endgrent \
-    endpwent \
-    fchown \
-    fchmod \
-    ftruncate \
-    iswspace \
-    mkfifo \
-    mbrlen \
-    setgroups \
-    sethostname \
-    siginterrupt \
-    sync \
-    sysctl \
-    sysinfo \
-    tcgetpgrp \
-  )
+  AC_CHECK_FUNCS_ONCE([
+    endgrent
+    endpwent
+    fallocate
+    fchown
+    fchmod
+    ftruncate
+    iswspace
+    mkfifo
+    mbrlen
+    setgroups
+    sethostname
+    siginterrupt
+    sync
+    syncfs
+    sysctl
+    sysinfo
+    tcgetpgrp
+  ])
+
+  # These checks are for Interix, to avoid its getgr* functions, in favor
+  # of these replacements.  The replacement functions are much more efficient
+  # because they do not query the domain controller for user information
+  # when it is not needed.
+  AC_CHECK_FUNCS_ONCE([
+    getgrgid_nomembers
+    getgrnam_nomembers
+    getgrent_nomembers
+  ])
 
   dnl This can't use AC_REQUIRE; I'm not quite sure why.
   cu_PREREQ_STAT_PROG
 
   # for dd.c and shred.c
-  coreutils_saved_libs=$LIBS
-    LIB_FDATASYNC=
+  #
+  # Use fdatasync only if declared.  On MacOS X 10.7, fdatasync exists but
+  # is not declared, and is ineffective.
+  LIB_FDATASYNC=
+  AC_SUBST([LIB_FDATASYNC])
+  AC_CHECK_DECLS_ONCE([fdatasync])
+  if test $ac_cv_have_decl_fdatasync = yes; then
+    coreutils_saved_libs=$LIBS
     AC_SEARCH_LIBS([fdatasync], [rt posix4],
                    [test "$ac_cv_search_fdatasync" = "none required" ||
                     LIB_FDATASYNC=$ac_cv_search_fdatasync])
-    AC_SUBST([LIB_FDATASYNC])
     AC_CHECK_FUNCS([fdatasync])
-  LIBS=$coreutils_saved_libs
+    LIBS=$coreutils_saved_libs
+  fi
 
   # Check whether libcap is usable -- for ls --color support
   LIB_CAP=
@@ -125,7 +147,7 @@ AC_DEFUN([coreutils_MACROS],
   fi
   AC_SUBST([LIB_CAP])
 
-  # See if linking `seq' requires -lm.
+  # See if linking 'seq' requires -lm.
   # It does on nearly every system.  The single exception (so far) is
   # BeOS which has all the math functions in the normal runtime library
   # and doesn't have a separate math library.
@@ -142,6 +164,21 @@ AC_DEFUN([coreutils_MACROS],
      AC_TRY_LINK([#include <math.h>], [$ac_seq_body], [SEQ_LIBM=-lm])
      LIBS="$ac_seq_save_LIBS"
     ])
+
+
+  # See is fpsetprec() required to use extended double precision
+  # This is needed on 32 bit FreeBSD to give accurate conversion of:
+  # `numfmt 9223372036854775808`
+  AC_TRY_LINK([#include <ieeefp.h>],
+    [#ifdef __i386__
+      fpsetprec(FP_PE);
+     #else
+     # error not required on 64 bit
+     #endif
+    ], [ac_have_fpsetprec=yes], [ac_have_fpsetprec=no])
+  if test "$ac_have_fpsetprec" = "yes" ; then
+    AC_DEFINE([HAVE_FPSETPREC], 1, [whether fpsetprec is present and required])
+  fi
 
   AC_REQUIRE([AM_LANGINFO_CODESET])
 
@@ -167,16 +204,16 @@ AC_DEFUN([coreutils_MACROS],
 
 AC_DEFUN([gl_CHECK_ALL_HEADERS],
 [
-  AC_CHECK_HEADERS_ONCE( \
-    hurd.h \
-    paths.h \
-    priv.h \
-    stropts.h \
-    sys/param.h \
-    sys/resource.h \
-    sys/systeminfo.h \
-    syslog.h \
-  )
+  AC_CHECK_HEADERS_ONCE([
+    hurd.h
+    linux/falloc.h
+    paths.h
+    priv.h
+    stropts.h
+    sys/param.h
+    sys/systeminfo.h
+    syslog.h
+  ])
   AC_CHECK_HEADERS([sys/sysctl.h], [], [],
     [AC_INCLUDES_DEFAULT
      [#if HAVE_SYS_PARAM_H
@@ -187,11 +224,6 @@ AC_DEFUN([gl_CHECK_ALL_HEADERS],
 # This macro must be invoked before any tests that run the compiler.
 AC_DEFUN([gl_CHECK_ALL_TYPES],
 [
-  dnl This test must precede tests of compiler characteristics like
-  dnl that for the inline keyword, since it may change the degree to
-  dnl which the compiler supports such features.
-  AC_REQUIRE([AM_C_PROTOTYPES])
-
   dnl Checks for typedefs, structures, and compiler characteristics.
   AC_REQUIRE([gl_BIGENDIAN])
   AC_REQUIRE([AC_C_VOLATILE])

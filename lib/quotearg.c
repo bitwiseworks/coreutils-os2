@@ -1,7 +1,6 @@
 /* quotearg.c - quote arguments for output
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008,
-   2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 1998-2002, 2004-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,11 +17,21 @@
 
 /* Written by Paul Eggert <eggert@twinsun.com> */
 
+/* Without this pragma, gcc 4.7.0 20111124 mistakenly suggests that
+   the quoting_options_from_style function might be candidate for
+   attribute 'pure'  */
+#if (__GNUC__ == 4 && 6 <= __GNUC_MINOR__) || 4 < __GNUC__
+# pragma GCC diagnostic ignored "-Wsuggest-attribute=pure"
+#endif
+
 #include <config.h>
 
 #include "quotearg.h"
+#include "quote.h"
 
 #include "xalloc.h"
+#include "c-strcaseeq.h"
+#include "localcharset.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -68,6 +77,8 @@ char const *const quoting_style_args[] =
   "literal",
   "shell",
   "shell-always",
+  "shell-escape",
+  "shell-escape-always",
   "c",
   "c-maybe",
   "escape",
@@ -82,6 +93,8 @@ enum quoting_style const quoting_style_vals[] =
   literal_quoting_style,
   shell_quoting_style,
   shell_always_quoting_style,
+  shell_escape_quoting_style,
+  shell_escape_always_quoting_style,
   c_quoting_style,
   c_maybe_quoting_style,
   escape_quoting_style,
@@ -107,7 +120,7 @@ clone_quoting_options (struct quoting_options *o)
 
 /* Get the value of O's quoting style.  If O is null, use the default.  */
 enum quoting_style
-get_quoting_style (struct quoting_options *o)
+get_quoting_style (struct quoting_options const *o)
 {
   return (o ? o : &default_quoting_options)->style;
 }
@@ -166,25 +179,54 @@ set_custom_quoting (struct quoting_options *o,
 }
 
 /* Return quoting options for STYLE, with no extra quoting.  */
-static struct quoting_options
+static struct quoting_options /* NOT PURE!! */
 quoting_options_from_style (enum quoting_style style)
 {
-  struct quoting_options o;
+  struct quoting_options o = { literal_quoting_style, 0, { 0 }, NULL, NULL };
+  if (style == custom_quoting_style)
+    abort ();
   o.style = style;
-  o.flags = 0;
-  memset (o.quote_these_too, 0, sizeof o.quote_these_too);
   return o;
 }
 
 /* MSGID approximates a quotation mark.  Return its translation if it
-   has one; otherwise, return either it or "\"", depending on S.  */
+   has one; otherwise, return either it or "\"", depending on S.
+
+   S is either clocale_quoting_style or locale_quoting_style.  */
 static char const *
 gettext_quote (char const *msgid, enum quoting_style s)
 {
   char const *translation = _(msgid);
-  if (translation == msgid && s == clocale_quoting_style)
-    translation = "\"";
-  return translation;
+  char const *locale_code;
+
+  if (translation != msgid)
+    return translation;
+
+  /* For UTF-8 and GB-18030, use single quotes U+2018 and U+2019.
+     Here is a list of other locales that include U+2018 and U+2019:
+
+        ISO-8859-7   0xA1                 KOI8-T       0x91
+        CP869        0x8B                 CP874        0x91
+        CP932        0x81 0x65            CP936        0xA1 0xAE
+        CP949        0xA1 0xAE            CP950        0xA1 0xA5
+        CP1250       0x91                 CP1251       0x91
+        CP1252       0x91                 CP1253       0x91
+        CP1254       0x91                 CP1255       0x91
+        CP1256       0x91                 CP1257       0x91
+        EUC-JP       0xA1 0xC6            EUC-KR       0xA1 0xAE
+        EUC-TW       0xA1 0xE4            BIG5         0xA1 0xA5
+        BIG5-HKSCS   0xA1 0xA5            EUC-CN       0xA1 0xAE
+        GBK          0xA1 0xAE            Georgian-PS  0x91
+        PT154        0x91
+
+     None of these is still in wide use; using iconv is overkill.  */
+  locale_code = locale_charset ();
+  if (STRCASEEQ (locale_code, "UTF-8", 'U','T','F','-','8',0,0,0,0))
+    return msgid[0] == '`' ? "\xe2\x80\x98": "\xe2\x80\x99";
+  if (STRCASEEQ (locale_code, "GB18030", 'G','B','1','8','0','3','0',0,0))
+    return msgid[0] == '`' ? "\xa1\ae": "\xa1\xaf";
+
+  return (s == clocale_quoting_style ? "\"" : "'");
 }
 
 /* Place into buffer BUFFER (of size BUFFERSIZE) a quoted version of
@@ -215,6 +257,7 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
   bool backslash_escapes = false;
   bool unibyte_locale = MB_CUR_MAX == 1;
   bool elide_outer_quotes = (flags & QA_ELIDE_OUTER_QUOTES) != 0;
+  bool pending_shell_escape_end = false;
 
 #define STORE(c) \
     do \
@@ -222,6 +265,36 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
         if (len < buffersize) \
           buffer[len] = (c); \
         len++; \
+      } \
+    while (0)
+
+#define START_ESC() \
+    do \
+      { \
+        if (elide_outer_quotes) \
+          goto force_outer_quoting_style; \
+        escaping = true; \
+        if (quoting_style == shell_always_quoting_style \
+            && ! pending_shell_escape_end) \
+          { \
+            STORE ('\''); \
+            STORE ('$'); \
+            STORE ('\''); \
+            pending_shell_escape_end = true; \
+          } \
+        STORE ('\\'); \
+      } \
+    while (0)
+
+#define END_ESC() \
+    do \
+      { \
+        if (pending_shell_escape_end && ! escaping) \
+          { \
+            STORE ('\''); \
+            STORE ('\''); \
+            pending_shell_escape_end = false; \
+          } \
       } \
     while (0)
 
@@ -252,22 +325,24 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
           {
             /* TRANSLATORS:
                Get translations for open and closing quotation marks.
-
                The message catalog should translate "`" to a left
                quotation mark suitable for the locale, and similarly for
-               "'".  If the catalog has no translation,
-               locale_quoting_style quotes `like this', and
-               clocale_quoting_style quotes "like this".
+               "'".  For example, a French Unicode local should translate
+               these to U+00AB (LEFT-POINTING DOUBLE ANGLE
+               QUOTATION MARK), and U+00BB (RIGHT-POINTING DOUBLE ANGLE
+               QUOTATION MARK), respectively.
 
-               For example, an American English Unicode locale should
-               translate "`" to U+201C (LEFT DOUBLE QUOTATION MARK), and
-               should translate "'" to U+201D (RIGHT DOUBLE QUOTATION
-               MARK).  A British English Unicode locale should instead
-               translate these to U+2018 (LEFT SINGLE QUOTATION MARK)
-               and U+2019 (RIGHT SINGLE QUOTATION MARK), respectively.
+               If the catalog has no translation, we will try to
+               use Unicode U+2018 (LEFT SINGLE QUOTATION MARK) and
+               Unicode U+2019 (RIGHT SINGLE QUOTATION MARK).  If the
+               current locale is not Unicode, locale_quoting_style
+               will quote 'like this', and clocale_quoting_style will
+               quote "like this".  You should always include translations
+               for "`" and "'" even if U+2018 and U+2019 are appropriate
+               for your locale.
 
                If you don't know what to put here, please see
-               <http://en.wikipedia.org/wiki/Quotation_mark#Glyphs>
+               <http://en.wikipedia.org/wiki/Quotation_marks_in_other_languages>
                and use glyphs suitable for your language.  */
             left_quote = gettext_quote (N_("`"), quoting_style);
             right_quote = gettext_quote (N_("'"), quoting_style);
@@ -281,11 +356,18 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
       }
       break;
 
+    case shell_escape_quoting_style:
+      backslash_escapes = true;
+      /* Fall through.  */
     case shell_quoting_style:
-      quoting_style = shell_always_quoting_style;
       elide_outer_quotes = true;
       /* Fall through.  */
+    case shell_escape_always_quoting_style:
+      if (!elide_outer_quotes)
+        backslash_escapes = true;
+      /* Fall through.  */
     case shell_always_quoting_style:
+      quoting_style = shell_always_quoting_style;
       if (!elide_outer_quotes)
         STORE ('\'');
       quote_string = "'";
@@ -305,10 +387,17 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
       unsigned char c;
       unsigned char esc;
       bool is_right_quote = false;
+      bool escaping = false;
 
       if (backslash_escapes
+          && quoting_style != shell_always_quoting_style
           && quote_string_len
-          && i + quote_string_len <= argsize
+          && (i + quote_string_len
+              <= (argsize == SIZE_MAX && 1 < quote_string_len
+                  /* Use strlen only if we must: when argsize is SIZE_MAX,
+                     and when the quote string is more than 1 byte long.
+                     If we do call strlen, save the result.  */
+                  ? (argsize = strlen (arg)) : argsize))
           && memcmp (arg + i, quote_string, quote_string_len) == 0)
         {
           if (elide_outer_quotes)
@@ -322,15 +411,15 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
         case '\0':
           if (backslash_escapes)
             {
-              if (elide_outer_quotes)
-                goto force_outer_quoting_style;
-              STORE ('\\');
+              START_ESC ();
               /* If quote_string were to begin with digits, we'd need to
                  test for the end of the arg as well.  However, it's
                  hard to imagine any locale that would use digits in
                  quotes, and set_custom_quoting is documented not to
-                 accept them.  */
-              if (i + 1 < argsize && '0' <= arg[i + 1] && arg[i + 1] <= '9')
+                 accept them.  Use only a single \0 with shell-escape
+                 as currently digits are not printed within $'...'  */
+              if (quoting_style != shell_always_quoting_style
+                  && i + 1 < argsize && '0' <= arg[i + 1] && arg[i + 1] <= '9')
                 {
                   STORE ('0');
                   STORE ('0');
@@ -391,6 +480,14 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
         case '\t': esc = 't'; goto c_and_shell_escape;
         case '\v': esc = 'v'; goto c_escape;
         case '\\': esc = c;
+          /* Never need to escape '\' in shell case.  */
+          if (quoting_style == shell_always_quoting_style)
+            {
+              if (elide_outer_quotes)
+                goto force_outer_quoting_style;
+              goto store_c;
+            }
+
           /* No need to escape the escape if we are trying to elide
              outer quotes and nothing else is problematic.  */
           if (backslash_escapes && elide_outer_quotes && quote_string_len)
@@ -443,6 +540,7 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
               STORE ('\'');
               STORE ('\\');
               STORE ('\'');
+              pending_shell_escape_end = false;
             }
           break;
 
@@ -556,9 +654,7 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
                   {
                     if (backslash_escapes && ! printable)
                       {
-                        if (elide_outer_quotes)
-                          goto force_outer_quoting_style;
-                        STORE ('\\');
+                        START_ESC ();
                         STORE ('0' + (c >> 6));
                         STORE ('0' + ((c >> 3) & 7));
                         c = '0' + (c & 7);
@@ -570,6 +666,7 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
                       }
                     if (ilim <= i + 1)
                       break;
+                    END_ESC ();
                     STORE (c);
                     c = arg[++i];
                   }
@@ -579,18 +676,18 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
           }
         }
 
-      if (! ((backslash_escapes || elide_outer_quotes)
+      if (! (((backslash_escapes && quoting_style != shell_always_quoting_style)
+              || elide_outer_quotes)
              && quote_these_too
-             && quote_these_too[c / INT_BITS] & (1 << (c % INT_BITS)))
+             && quote_these_too[c / INT_BITS] >> (c % INT_BITS) & 1)
           && !is_right_quote)
         goto store_c;
 
     store_escape:
-      if (elide_outer_quotes)
-        goto force_outer_quoting_style;
-      STORE ('\\');
+      START_ESC ();
 
     store_c:
+      END_ESC ();
       STORE (c);
     }
 
@@ -609,6 +706,8 @@ quotearg_buffer_restyled (char *buffer, size_t buffersize,
  force_outer_quoting_style:
   /* Don't reuse quote_these_too, since the addition of outer quotes
      sufficiently quotes the specified characters.  */
+  if (quoting_style == shell_always_quoting_style && backslash_escapes)
+    quoting_style = shell_escape_always_quoting_style;
   return quotearg_buffer_restyled (buffer, buffersize, arg, argsize,
                                    quoting_style,
                                    flags & ~QA_ELIDE_OUTER_QUOTES, NULL,
@@ -731,7 +830,7 @@ quotearg_n_options (int n, char const *arg, size_t argsize,
 
   if (nslots <= n0)
     {
-      /* FIXME: technically, the type of n1 should be `unsigned int',
+      /* FIXME: technically, the type of n1 should be 'unsigned int',
          but that evokes an unsuppressible warning from gcc-4.0.1 and
          older.  If gcc ever provides an option to suppress that warning,
          revert to the original type, so that the test in xalloc_oversized
@@ -856,6 +955,15 @@ quotearg_colon_mem (char const *arg, size_t argsize)
 }
 
 char *
+quotearg_n_style_colon (int n, enum quoting_style s, char const *arg)
+{
+  struct quoting_options options;
+  options = quoting_options_from_style (s);
+  set_char_quoting (&options, ':', 1);
+  return quotearg_n_options (n, arg, SIZE_MAX, &options);
+}
+
+char *
 quotearg_n_custom (int n, char const *left_quote,
                    char const *right_quote, char const *arg)
 {
@@ -886,4 +994,38 @@ quotearg_custom_mem (char const *left_quote, char const *right_quote,
 {
   return quotearg_n_custom_mem (0, left_quote, right_quote, arg,
                                 argsize);
+}
+
+
+/* The quoting option used by the functions of quote.h.  */
+struct quoting_options quote_quoting_options =
+  {
+    locale_quoting_style,
+    0,
+    { 0 },
+    NULL, NULL
+  };
+
+char const *
+quote_n_mem (int n, char const *arg, size_t argsize)
+{
+  return quotearg_n_options (n, arg, argsize, &quote_quoting_options);
+}
+
+char const *
+quote_mem (char const *arg, size_t argsize)
+{
+  return quote_n_mem (0, arg, argsize);
+}
+
+char const *
+quote_n (int n, char const *arg)
+{
+  return quote_n_mem (n, arg, SIZE_MAX);
+}
+
+char const *
+quote (char const *arg)
+{
+  return quote_n (0, arg);
 }

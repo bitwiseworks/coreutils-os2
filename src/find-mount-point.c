@@ -1,5 +1,5 @@
 /* find-mount-point.c -- find the root mount point for a file.
-   Copyright (C) 2010 Free Software Foundation, Inc.
+   Copyright (C) 2010-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 #include "system.h"
 #include "error.h"
-#include "quote.h"
 #include "save-cwd.h"
 #include "xgetcwd.h"
 #include "find-mount-point.h"
@@ -29,11 +28,11 @@
    Give a diagnostic and return NULL if unable to determine the mount point.
    Exit if unable to restore current working directory.  */
 extern char *
-find_mount_point (const char *file, const struct stat *file_stat)
+find_mount_point (char const *file, struct stat const *file_stat)
 {
   struct saved_cwd cwd;
   struct stat last_stat;
-  char *mp = NULL;		/* The malloced mount point.  */
+  char *mp = NULL;		/* The malloc'd mount point.  */
 
   if (save_cwd (&cwd) != 0)
     {
@@ -47,7 +46,7 @@ find_mount_point (const char *file, const struct stat *file_stat)
       last_stat = *file_stat;
       if (chdir (file) < 0)
         {
-          error (0, errno, _("cannot change to directory %s"), quote (file));
+          error (0, errno, _("cannot change to directory %s"), quoteaf (file));
           return NULL;
         }
     }
@@ -61,14 +60,14 @@ find_mount_point (const char *file, const struct stat *file_stat)
 
       if (chdir (dir) < 0)
         {
-          error (0, errno, _("cannot change to directory %s"), quote (dir));
+          error (0, errno, _("cannot change to directory %s"), quoteaf (dir));
           return NULL;
         }
 
       if (stat (".", &last_stat) < 0)
         {
           error (0, errno, _("cannot stat current directory (now %s)"),
-                 quote (dir));
+                 quoteaf (dir));
           goto done;
         }
     }
@@ -81,7 +80,7 @@ find_mount_point (const char *file, const struct stat *file_stat)
       struct stat st;
       if (stat ("..", &st) < 0)
         {
-          error (0, errno, _("cannot stat %s"), quote (".."));
+          error (0, errno, _("cannot stat %s"), quoteaf (".."));
           goto done;
         }
       if (st.st_dev != last_stat.st_dev || st.st_ino == last_stat.st_ino)
@@ -89,7 +88,7 @@ find_mount_point (const char *file, const struct stat *file_stat)
         break;
       if (chdir ("..") < 0)
         {
-          error (0, errno, _("cannot change to directory %s"), quote (".."));
+          error (0, errno, _("cannot change to directory %s"), quoteaf (".."));
           goto done;
         }
       last_stat = st;

@@ -1,5 +1,5 @@
 /* yes - output a string repeatedly until killed
-   Copyright (C) 1991-1997, 1999-2004, 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 1991-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@
 #include "error.h"
 #include "long-options.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "yes"
 
 #define AUTHORS proper_name ("David MacKenzie")
@@ -35,8 +35,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -46,12 +45,12 @@ Usage: %s [STRING]...\n\
               program_name, program_name);
 
       fputs (_("\
-Repeatedly output a line with all specified STRING(s), or `y'.\n\
+Repeatedly output a line with all specified STRING(s), or 'y'.\n\
 \n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -59,6 +58,10 @@ Repeatedly output a line with all specified STRING(s), or `y'.\n\
 int
 main (int argc, char **argv)
 {
+  char buf[BUFSIZ];
+  char *pbuf = buf;
+  int i;
+
   initialize_main (&argc, &argv);
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");
@@ -78,15 +81,54 @@ main (int argc, char **argv)
       argv[argc++] = bad_cast ("y");
     }
 
-  while (true)
+  /* Buffer data locally once, rather than having the
+     large overhead of stdio buffering each item.  */
+  for (i = optind; i < argc; i++)
     {
-      int i;
-      for (i = optind; i < argc; i++)
-        if (fputs (argv[i], stdout) == EOF
-            || putchar (i == argc - 1 ? '\n' : ' ') == EOF)
+      size_t len = strlen (argv[i]);
+      if (BUFSIZ < len || BUFSIZ - len <= pbuf - buf)
+        break;
+      memcpy (pbuf, argv[i], len);
+      pbuf += len;
+      *pbuf++ = i == argc - 1 ? '\n' : ' ';
+    }
+  if (i == argc)
+    {
+      size_t line_len = pbuf - buf;
+      size_t lines = BUFSIZ / line_len;
+      while (--lines)
+        {
+          memcpy (pbuf, pbuf - line_len, line_len);
+          pbuf += line_len;
+        }
+    }
+
+  /* The normal case is to continuously output the local buffer.  */
+  while (i == argc)
+    {
+      if (write (STDOUT_FILENO, buf, pbuf - buf) == -1)
+        {
+          error (0, errno, _("standard output"));
+          return EXIT_FAILURE;
+        }
+    }
+
+  /* If the data doesn't fit in BUFSIZ then output
+     what we've buffered, and iterate over the remaining items.  */
+  while (true /* i != argc */)
+    {
+      int j;
+      if ((pbuf - buf) && fwrite (buf, pbuf - buf, 1, stdout) != 1)
+        {
+          error (0, errno, _("standard output"));
+          return EXIT_FAILURE;
+        }
+      for (j = i; j < argc; j++)
+        if (fputs (argv[j], stdout) == EOF
+            || putchar (j == argc - 1 ? '\n' : ' ') == EOF)
           {
             error (0, errno, _("standard output"));
-            exit (EXIT_FAILURE);
+            return EXIT_FAILURE;
           }
     }
 }

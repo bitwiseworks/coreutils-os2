@@ -1,5 +1,5 @@
 /* kill -- send a signal to a process
-   Copyright (C) 2002-2005, 2008-2010 Free Software Foundation, Inc.
+   Copyright (C) 2002-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,18 +21,18 @@
 #include <getopt.h>
 #include <sys/types.h>
 #include <signal.h>
-#include <sys/wait.h>
 
 #include "system.h"
 #include "error.h"
 #include "sig2str.h"
 #include "operand2sig.h"
+#include "quote.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "kill"
 
 #define AUTHORS proper_name ("Paul Eggert")
-
+
 #if ! (HAVE_DECL_STRSIGNAL || defined strsignal)
 # if ! (HAVE_DECL_SYS_SIGLIST || defined sys_siglist)
 #  if HAVE_DECL__SYS_SIGLIST || defined _sys_siglist
@@ -50,12 +50,12 @@
 #  define strsignal(signum) 0
 # endif
 #endif
-
+
 static char const short_options[] =
   "0::1::2::3::4::5::6::7::8::9::"
-  "A::B::C::D::E::F::G::H::I::J::K::L::M::"
+  "A::B::C::D::E::F::G::H::I::J::K::M::"
   "N::O::P::Q::R::S::T::U::V::W::X::Y::Z::"
-  "ln:s:t";
+  "Lln:s:t";
 
 static struct option const long_options[] =
 {
@@ -71,8 +71,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -83,11 +82,10 @@ Usage: %s [-s SIGNAL | -SIGNAL] PID...\n\
               program_name, program_name, program_name);
       fputs (_("\
 Send signals to processes, or list signals.\n\
-\n\
 "), stdout);
-      fputs (_("\
-Mandatory arguments to long options are mandatory for short options too.\n\
-"), stdout);
+
+      emit_mandatory_arg_note ();
+
       fputs (_("\
   -s, --signal=SIGNAL, -SIGNAL\n\
                    specify the name or number of the signal to be sent\n\
@@ -97,23 +95,23 @@ Mandatory arguments to long options are mandatory for short options too.\n\
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
       fputs (_("\n\
-SIGNAL may be a signal name like `HUP', or a signal number like `1',\n\
+SIGNAL may be a signal name like 'HUP', or a signal number like '1',\n\
 or the exit status of a process terminated by a signal.\n\
 PID is an integer; if negative it identifies a process group.\n\
 "), stdout);
       printf (USAGE_BUILTIN_WARNING, PROGRAM_NAME);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
-
-/* Print a row of `kill -t' output.  NUM_WIDTH is the maximum signal
+
+/* Print a row of 'kill -t' output.  NUM_WIDTH is the maximum signal
    number width, and SIGNUM is the signal number to print.  The
    maximum name width is NAME_WIDTH, and SIGNAME is the name to print.  */
 
 static void
-print_table_row (unsigned int num_width, int signum,
-                 unsigned int name_width, char const *signame)
+print_table_row (int num_width, int signum,
+                 int name_width, char const *signame)
 {
   char const *description = strsignal (signum);
   printf ("%*d %-*s %s\n", num_width, signum, name_width, signame,
@@ -187,7 +185,7 @@ list_signals (bool table, char *const *argv)
 
   return status;
 }
-
+
 /* Send signal SIGNUM to all the processes or process groups specified
    by ARGV.  Return a suitable exit status.  */
 
@@ -205,12 +203,12 @@ send_signals (int signum, char *const *argv)
 
       if (errno == ERANGE || pid != n || arg == endp || *endp)
         {
-          error (0, 0, _("%s: invalid process id"), arg);
+          error (0, 0, _("%s: invalid process id"), quote (arg));
           status = EXIT_FAILURE;
         }
       else if (kill (pid, signum) != 0)
         {
-          error (0, errno, "%s", arg);
+          error (0, errno, "%s", quote (arg));
           status = EXIT_FAILURE;
         }
     }
@@ -218,7 +216,7 @@ send_signals (int signum, char *const *argv)
 
   return status;
 }
-
+
 int
 main (int argc, char **argv)
 {
@@ -251,7 +249,7 @@ main (int argc, char **argv)
         /* Fall through.  */
       case 'A': case 'B': case 'C': case 'D': case 'E':
       case 'F': case 'G': case 'H': case 'I': case 'J':
-      case 'K': case 'L': case 'M': case 'N': case 'O':
+      case 'K': /*case 'L':*/ case 'M': case 'N': case 'O':
       case 'P': case 'Q': case 'R': case 'S': case 'T':
       case 'U': case 'V': case 'W': case 'X': case 'Y':
       case 'Z':
@@ -268,7 +266,7 @@ main (int argc, char **argv)
       case 's':
         if (0 <= signum)
           {
-            error (0, 0, _("%s: multiple signals specified"), optarg);
+            error (0, 0, _("%s: multiple signals specified"), quote (optarg));
             usage (EXIT_FAILURE);
           }
         signum = operand2sig (optarg, signame);
@@ -276,6 +274,7 @@ main (int argc, char **argv)
           usage (EXIT_FAILURE);
         break;
 
+      case 'L': /* -L is not documented, but is for procps compatibility.  */
       case 't':
         table = true;
         /* Fall through.  */
@@ -293,7 +292,7 @@ main (int argc, char **argv)
       default:
         usage (EXIT_FAILURE);
       }
- no_more_options:;
+ no_more_options:
 
   if (signum < 0)
     signum = SIGTERM;

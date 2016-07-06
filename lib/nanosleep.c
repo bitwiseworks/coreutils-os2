@@ -1,6 +1,6 @@
 /* Provide a replacement for the POSIX nanosleep function.
 
-   Copyright (C) 1999-2000, 2002, 2004-2010 Free Software Foundation, Inc.
+   Copyright (C) 1999-2000, 2002, 2004-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* written by Jim Meyering
-   and Bruno Haible for the Woe32 part */
+   and Bruno Haible for the native Windows part */
 
 #include <config.h>
 
@@ -45,12 +45,13 @@ enum { BILLION = 1000 * 1000 * 1000 };
 int
 nanosleep (const struct timespec *requested_delay,
            struct timespec *remaining_delay)
-#undef nanosleep
+# undef nanosleep
 {
-  /* nanosleep mishandles large sleeps due to internal overflow
-     problems.  The worst known case of this is cygwin 1.5.x, which
-     can't sleep more than 49.7 days (2**32 milliseconds).  Solve this
-     by breaking the sleep up into smaller chunks.  */
+  /* nanosleep mishandles large sleeps due to internal overflow problems.
+     The worst known case of this is Linux 2.6.9 with glibc 2.3.4, which
+     can't sleep more than 24.85 days (2^31 milliseconds).  Similarly,
+     cygwin 1.5.x, which can't sleep more than 49.7 days (2^32 milliseconds).
+     Solve this by breaking the sleep up into smaller chunks.  */
 
   if (requested_delay->tv_nsec < 0 || BILLION <= requested_delay->tv_nsec)
     {
@@ -60,11 +61,11 @@ nanosleep (const struct timespec *requested_delay,
 
   {
     /* Verify that time_t is large enough.  */
-    verify (TYPE_MAXIMUM (time_t) / 49 / 24 / 60 / 60);
-    const time_t limit = 49 * 24 * 60 * 60;
+    verify (TYPE_MAXIMUM (time_t) / 24 / 24 / 60 / 60);
+    const time_t limit = 24 * 24 * 60 * 60;
     time_t seconds = requested_delay->tv_sec;
     struct timespec intermediate;
-    intermediate.tv_nsec = 0;
+    intermediate.tv_nsec = requested_delay->tv_nsec;
 
     while (limit < seconds)
       {
@@ -75,31 +76,23 @@ nanosleep (const struct timespec *requested_delay,
         if (result)
           {
             if (remaining_delay)
-              {
-                remaining_delay->tv_sec += seconds;
-                remaining_delay->tv_nsec += requested_delay->tv_nsec;
-                if (BILLION <= requested_delay->tv_nsec)
-                  {
-                    remaining_delay->tv_sec++;
-                    remaining_delay->tv_nsec -= BILLION;
-                  }
-              }
+              remaining_delay->tv_sec += seconds;
             return result;
           }
+        intermediate.tv_nsec = 0;
       }
     intermediate.tv_sec = seconds;
-    intermediate.tv_nsec = requested_delay->tv_nsec;
     return nanosleep (&intermediate, remaining_delay);
   }
 }
 
 #elif (defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__
-/* Windows platforms.  */
+/* Native Windows platforms.  */
 
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
 
-/* The Win32 function Sleep() has a resolution of about 15 ms and takes
+/* The Windows API function Sleep() has a resolution of about 15 ms and takes
    at least 5 ms to execute.  We use this function for longer time periods.
    Additionally, we use busy-looping over short time periods, to get a
    resolution of about 0.01 ms.  In order to measure such short timespans,
@@ -209,7 +202,7 @@ sighandler (int sig)
 
 /* Suspend execution for at least *TS_DELAY seconds.  */
 
-static void
+static int
 my_usleep (const struct timespec *ts_delay)
 {
   struct timeval tv_delay;
@@ -217,16 +210,15 @@ my_usleep (const struct timespec *ts_delay)
   tv_delay.tv_usec = (ts_delay->tv_nsec + 999) / 1000;
   if (tv_delay.tv_usec == 1000000)
     {
-      time_t t1 = tv_delay.tv_sec + 1;
-      if (t1 < tv_delay.tv_sec)
+      if (tv_delay.tv_sec == TYPE_MAXIMUM (time_t))
         tv_delay.tv_usec = 1000000 - 1; /* close enough */
       else
         {
-          tv_delay.tv_sec = t1;
+          tv_delay.tv_sec++;
           tv_delay.tv_usec = 0;
         }
     }
-  select (0, NULL, NULL, NULL, &tv_delay);
+  return select (0, NULL, NULL, NULL, &tv_delay);
 }
 
 /* Suspend execution for at least *REQUESTED_DELAY seconds.  The
@@ -264,19 +256,21 @@ nanosleep (const struct timespec *requested_delay,
 
   suspended = 0;
 
-  my_usleep (requested_delay);
-
-  if (suspended)
+  if (my_usleep (requested_delay) == -1)
     {
-      /* Calculate time remaining.  */
-      /* FIXME: the code in sleep doesn't use this, so there's no
-         rush to implement it.  */
+      if (suspended)
+        {
+          /* Calculate time remaining.  */
+          /* FIXME: the code in sleep doesn't use this, so there's no
+             rush to implement it.  */
 
-      errno = EINTR;
+          errno = EINTR;
+        }
+      return -1;
     }
 
   /* FIXME: Restore sig handler?  */
 
-  return suspended;
+  return 0;
 }
 #endif

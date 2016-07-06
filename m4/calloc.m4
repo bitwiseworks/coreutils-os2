@@ -1,6 +1,6 @@
-# calloc.m4 serial 11
+# calloc.m4 serial 15
 
-# Copyright (C) 2004-2010 Free Software Foundation, Inc.
+# Copyright (C) 2004-2016 Free Software Foundation, Inc.
 # This file is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,
 # with or without modifications, as long as this notice is preserved.
@@ -14,32 +14,56 @@
 
 # _AC_FUNC_CALLOC_IF([IF-WORKS], [IF-NOT])
 # -------------------------------------
-# If `calloc (0, 0)' is properly handled, run IF-WORKS, otherwise, IF-NOT.
+# If 'calloc (0, 0)' is properly handled, run IF-WORKS, otherwise, IF-NOT.
 AC_DEFUN([_AC_FUNC_CALLOC_IF],
-[AC_REQUIRE([AC_TYPE_SIZE_T])dnl
-AC_CACHE_CHECK([for GNU libc compatible calloc], [ac_cv_func_calloc_0_nonnull],
-[AC_RUN_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT],
-                  [[exit (!calloc (0, 0) || calloc ((size_t) -1 / 8 + 1, 8));]])],
-               [ac_cv_func_calloc_0_nonnull=yes],
-               [ac_cv_func_calloc_0_nonnull=no],
-               [ac_cv_func_calloc_0_nonnull=no])])
-AS_IF([test $ac_cv_func_calloc_0_nonnull = yes], [$1], [$2])
+[
+  AC_REQUIRE([AC_TYPE_SIZE_T])dnl
+  AC_REQUIRE([AC_CANONICAL_HOST]) dnl for cross-compiles
+  AC_CACHE_CHECK([for GNU libc compatible calloc],
+    [ac_cv_func_calloc_0_nonnull],
+    [AC_RUN_IFELSE(
+       [AC_LANG_PROGRAM(
+          [AC_INCLUDES_DEFAULT],
+          [[int result = 0;
+            if (!calloc (0, 0))
+              result |= 1;
+            if (calloc ((size_t) -1 / 8 + 1, 8))
+              result |= 2;
+            return result;
+          ]])],
+       [ac_cv_func_calloc_0_nonnull=yes],
+       [ac_cv_func_calloc_0_nonnull=no],
+       [case "$host_os" in
+                  # Guess yes on glibc systems.
+          *-gnu*) ac_cv_func_calloc_0_nonnull="guessing yes" ;;
+                  # If we don't know, assume the worst.
+          *)      ac_cv_func_calloc_0_nonnull="guessing no" ;;
+        esac
+       ])])
+  case "$ac_cv_func_calloc_0_nonnull" in
+    *yes)
+      $1
+      ;;
+    *)
+      $2
+      ;;
+  esac
 ])# AC_FUNC_CALLOC
 
 
 # gl_FUNC_CALLOC_GNU
 # ------------------
-# Report whether `calloc (0, 0)' is properly handled, and replace calloc if
+# Report whether 'calloc (0, 0)' is properly handled, and replace calloc if
 # needed.
 AC_DEFUN([gl_FUNC_CALLOC_GNU],
 [
   AC_REQUIRE([gl_STDLIB_H_DEFAULTS])
   _AC_FUNC_CALLOC_IF(
     [AC_DEFINE([HAVE_CALLOC_GNU], [1],
-               [Define to 1 if your system has a GNU libc compatible `calloc'
+               [Define to 1 if your system has a GNU libc compatible 'calloc'
                 function, and to 0 otherwise.])],
     [AC_DEFINE([HAVE_CALLOC_GNU], [0])
-     gl_REPLACE_CALLOC
+     REPLACE_CALLOC=1
     ])
 ])# gl_FUNC_CALLOC_GNU
 
@@ -56,12 +80,6 @@ AC_DEFUN([gl_FUNC_CALLOC_POSIX],
     AC_DEFINE([HAVE_CALLOC_POSIX], [1],
       [Define if the 'calloc' function is POSIX compliant.])
   else
-    gl_REPLACE_CALLOC
+    REPLACE_CALLOC=1
   fi
-])
-
-AC_DEFUN([gl_REPLACE_CALLOC],
-[
-  AC_LIBOBJ([calloc])
-  REPLACE_CALLOC=1
 ])

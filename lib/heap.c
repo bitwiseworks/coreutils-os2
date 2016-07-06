@@ -1,6 +1,6 @@
 /* Barebones heap implementation supporting only insert and pop.
 
-   Copyright (C) 2010 Free Software Foundation, Inc.
+   Copyright (C) 2010-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -93,10 +93,12 @@ heap_insert (struct heap *heap, void *item)
 void *
 heap_remove_top (struct heap *heap)
 {
+  void *top;
+
   if (heap->count == 0)
     return NULL;
 
-  void *top = heap->array[1];
+  top = heap->array[1];
   heap->array[1] = heap->array[heap->count--];
   heapify_down (heap->array, heap->count, 1, heap->compare);
 

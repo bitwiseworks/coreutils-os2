@@ -1,6 +1,5 @@
 /* touch -- change modification and access times of files
-   Copyright (C) 1987, 1989-1991, 1995-2005, 2007-2010 Free Software
-   Foundation, Inc.
+   Copyright (C) 1987-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -35,7 +34,7 @@
 #include "stat-time.h"
 #include "utimens.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "touch"
 
 #define AUTHORS \
@@ -45,7 +44,7 @@
   proper_name ("David MacKenzie"), \
   proper_name ("Randy Smith")
 
-/* Bitmasks for `change_times'. */
+/* Bitmasks for 'change_times'. */
 #define CH_ATIME 1
 #define CH_MTIME 2
 
@@ -93,13 +92,13 @@ static struct option const longopts[] =
   {NULL, 0, NULL, 0}
 };
 
-/* Valid arguments to the `--time' option. */
+/* Valid arguments to the '--time' option. */
 static char const* const time_args[] =
 {
   "atime", "access", "use", "mtime", "modify", NULL
 };
 
-/* The bits in `change_times' that those arguments set. */
+/* The bits in 'change_times' that those arguments set. */
 static int const time_masks[] =
 {
   CH_ATIME, CH_ATIME, CH_ATIME, CH_MTIME, CH_MTIME
@@ -133,11 +132,10 @@ touch (const char *file)
     {
       /* Try to open FILE, creating it if necessary.  */
       fd = fd_reopen (STDIN_FILENO, file,
-                      O_WRONLY | O_CREAT | O_NONBLOCK | O_NOCTTY,
-                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+                      O_WRONLY | O_CREAT | O_NONBLOCK | O_NOCTTY, MODE_RW_UGO);
 
       /* Don't save a copy of errno if it's EISDIR, since that would lead
-         touch to give a bogus diagnostic for e.g., `touch /' (assuming
+         touch to give a bogus diagnostic for e.g., 'touch /' (assuming
          we don't own / or have write access to it).  On Solaris 5.6,
          and probably other systems, it is EINVAL.  On SunOS4, it's EPERM.  */
       if (fd == -1 && errno != EISDIR && errno != EINVAL && errno != EPERM)
@@ -171,7 +169,7 @@ touch (const char *file)
     {
       if (close (STDIN_FILENO) != 0)
         {
-          error (0, errno, _("closing %s"), quote (file));
+          error (0, errno, _("failed to close %s"), quoteaf (file));
           return false;
         }
     }
@@ -190,13 +188,13 @@ touch (const char *file)
              - the file does not exist, but the parent directory is unwritable
              - the file exists, but it isn't writable
              I think it's not worth trying to distinguish them.  */
-          error (0, open_errno, _("cannot touch %s"), quote (file));
+          error (0, open_errno, _("cannot touch %s"), quoteaf (file));
         }
       else
         {
           if (no_create && errno == ENOENT)
             return true;
-          error (0, errno, _("setting times of %s"), quote (file));
+          error (0, errno, _("setting times of %s"), quoteaf (file));
         }
       return false;
     }
@@ -208,8 +206,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]... FILE...\n"), program_name);
@@ -221,11 +218,10 @@ is supplied.\n\
 \n\
 A FILE argument string of - is handled specially and causes touch to\n\
 change the times of the file associated with standard output.\n\
-\n\
 "), stdout);
-      fputs (_("\
-Mandatory arguments to long options are mandatory for short options too.\n\
-"), stdout);
+
+      emit_mandatory_arg_note ();
+
       fputs (_("\
   -a                     change only the access time\n\
   -c, --no-create        do not create any files\n\
@@ -241,7 +237,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
       fputs (_("\
   -r, --reference=FILE   use this file's times instead of current time\n\
   -t STAMP               use [[CC]YY]MMDDhhmm[.ss] instead of current time\n\
-  --time=WORD            change the specified time:\n\
+      --time=WORD        change the specified time:\n\
                            WORD is access, atime, or use: equivalent to -a\n\
                            WORD is modify or mtime: equivalent to -m\n\
 "), stdout);
@@ -251,7 +247,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 \n\
 Note that the -d and -t options accept different time-date formats.\n\
 "), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -352,7 +348,7 @@ main (int argc, char **argv)
       if (no_dereference ? lstat (ref_file, &ref_stats)
           : stat (ref_file, &ref_stats))
         error (EXIT_FAILURE, errno,
-               _("failed to get attributes of %s"), quote (ref_file));
+               _("failed to get attributes of %s"), quoteaf (ref_file));
       newtime[0] = get_stat_atime (&ref_stats);
       newtime[1] = get_stat_mtime (&ref_stats);
       date_set = true;
@@ -394,7 +390,7 @@ main (int argc, char **argv)
         }
     }
 
-  /* The obsolete `MMDDhhmm[YY]' form is valid IFF there are
+  /* The obsolete 'MMDDhhmm[YY]' form is valid IFF there are
      two or more non-option arguments.  */
   if (!date_set && 2 <= argc - optind && posix2_version () < 200112
       && posixtime (&newtime[0].tv_sec, argv[optind],
@@ -407,12 +403,18 @@ main (int argc, char **argv)
       if (! getenv ("POSIXLY_CORRECT"))
         {
           struct tm const *tm = localtime (&newtime[0].tv_sec);
-          error (0, 0,
-                 _("warning: `touch %s' is obsolete; use "
-                   "`touch -t %04ld%02d%02d%02d%02d.%02d'"),
-                 argv[optind],
-                 tm->tm_year + 1900L, tm->tm_mon + 1, tm->tm_mday,
-                 tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+          /* Technically, it appears that even a deliberate attempt to cause
+             the above localtime to return NULL will always fail because our
+             posixtime implementation rejects all dates for which localtime
+             would fail.  However, skip the warning if it ever fails.  */
+          if (tm)
+            error (0, 0,
+                   _("warning: 'touch %s' is obsolete; use "
+                     "'touch -t %04ld%02d%02d%02d%02d.%02d'"),
+                   argv[optind],
+                   tm->tm_year + 1900L, tm->tm_mon + 1, tm->tm_mday,
+                   tm->tm_hour, tm->tm_min, tm->tm_sec);
         }
 
       optind++;
@@ -435,5 +437,5 @@ main (int argc, char **argv)
   for (; optind < argc; ++optind)
     ok &= touch (argv[optind]);
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

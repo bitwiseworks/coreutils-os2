@@ -1,6 +1,6 @@
 # Test whether a file descriptor is a pipe.
 
-dnl Copyright (C) 2006, 2009-2010 Free Software Foundation, Inc.
+dnl Copyright (C) 2006, 2009-2016 Free Software Foundation, Inc.
 
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
@@ -11,9 +11,11 @@ dnl Written by Paul Eggert.
 AC_DEFUN([gl_ISAPIPE],
 [
   # OpenVMS has isapipe already, so check for it.
-  AC_REPLACE_FUNCS([isapipe])
-  if test $ac_cv_func_isapipe = no; then
-    gl_PREREQ_ISAPIPE
+  AC_CHECK_FUNCS([isapipe])
+  if test $ac_cv_func_isapipe = yes; then
+    HAVE_ISAPIPE=1
+  else
+    HAVE_ISAPIPE=0
   fi
 ])
 
@@ -39,8 +41,10 @@ AC_DEFUN([gl_PREREQ_ISAPIPE],
             {
               int fd[2];
               struct stat st;
-              if (pipe (fd) != 0 || fstat (fd[0], &st) != 0)
+              if (pipe (fd) != 0)
                 return 1;
+              if (fstat (fd[0], &st) != 0)
+                return 2;
               if (2 <= argc && argv[1][0] == '-')
                 {
                   char const *yesno = (S_ISFIFO (st.st_mode) ? "yes" : "no");
@@ -48,21 +52,21 @@ AC_DEFUN([gl_PREREQ_ISAPIPE],
                     {
                       long int i = st.st_nlink;
                       if (i != st.st_nlink)
-                        return 1;
+                        return 3;
                       printf ("%s (%ld)\n", yesno, i);
                     }
                   else
                     {
                       unsigned long int i = st.st_nlink;
                       if (i != st.st_nlink)
-                        return 1;
+                        return 4;
                       printf ("%s (%lu)\n", yesno, i);
                     }
                 }
               else
                 {
                   if (! S_ISFIFO (st.st_mode) && ! S_ISSOCK (st.st_mode))
-                    return 1;
+                    return 5;
                 }
               return 0;
             }]])],

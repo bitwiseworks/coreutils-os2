@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Substitute for and wrapper around <termios.h>.
-   Copyright (C) 2010 Free Software Foundation, Inc.
+   Copyright (C) 2010-2016 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,28 +12,36 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef _GL_TERMIOS_H
+#ifndef _@GUARD_PREFIX@_TERMIOS_H
 
 #if __GNUC__ >= 3
 @PRAGMA_SYSTEM_HEADER@
 #endif
 @PRAGMA_COLUMNS@
 
+/* On HP-UX 11.00, some of the function declarations in <sys/termio.h>,
+   included by <termios.h>, are not protected by extern "C".  Enforce
+   "C" linkage for these functions nevertheless.  */
+#if defined __hpux && defined __cplusplus
+# include <sys/types.h>
+# include <sys/ioctl.h>
+extern "C" {
+# include <sys/termio.h>
+}
+#endif
+
 /* The include_next requires a split double-inclusion guard.  */
 #if @HAVE_TERMIOS_H@
 # @INCLUDE_NEXT@ @NEXT_TERMIOS_H@
 #endif
 
-#ifndef _GL_TERMIOS_H
-#define _GL_TERMIOS_H
+#ifndef _@GUARD_PREFIX@_TERMIOS_H
+#define _@GUARD_PREFIX@_TERMIOS_H
 
-#if @GNULIB_TCGETSID@
 /* Get pid_t.  */
-# include <sys/types.h>
-#endif
+#include <sys/types.h>
 
 /* The definitions of _GL_FUNCDECL_RPL etc. are copied here.  */
 
@@ -49,7 +55,7 @@
    The argument is a descriptor if this controlling terminal.
    Return -1, with errno set, upon failure.  errno = ENOSYS means that the
    function is unsupported.  */
-# if !@HAVE_TCGETSID@
+# if !@HAVE_DECL_TCGETSID@
 _GL_FUNCDECL_SYS (tcgetsid, pid_t, (int fd));
 # endif
 _GL_CXXALIAS_SYS (tcgetsid, pid_t, (int fd));
@@ -63,5 +69,5 @@ _GL_WARN_ON_USE (tcgetsid, "tcgetsid is not portable - "
 #endif
 
 
-#endif /* _GL_TERMIOS_H */
-#endif /* _GL_TERMIOS_H */
+#endif /* _@GUARD_PREFIX@_TERMIOS_H */
+#endif /* _@GUARD_PREFIX@_TERMIOS_H */

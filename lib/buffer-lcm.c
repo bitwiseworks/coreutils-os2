@@ -1,6 +1,6 @@
 /* buffer-lcm.c - compute a good buffer size for dealing with two files
 
-   Copyright (C) 2002, 2005, 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2002-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 
 /* Written by Paul Eggert.  */
 
+#include <config.h>
 #include "buffer-lcm.h"
 
 /* Return a buffer size suitable for doing I/O with files whose block

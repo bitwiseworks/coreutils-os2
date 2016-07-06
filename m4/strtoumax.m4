@@ -1,30 +1,23 @@
-# strtoumax.m4 serial 7
-dnl Copyright (C) 2002, 2003, 2004, 2006, 2009, 2010 Free Software Foundation,
-dnl Inc.
+# strtoumax.m4 serial 12
+dnl Copyright (C) 2002-2004, 2006, 2009-2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
 
 AC_DEFUN([gl_FUNC_STRTOUMAX],
 [
-  dnl Work around a bug of AC_EGREP_CPP in autoconf-2.57.
-  AC_REQUIRE([AC_PROG_CPP])
-  AC_REQUIRE([AC_PROG_EGREP])
+  AC_REQUIRE([gl_INTTYPES_H_DEFAULTS])
 
-  AC_CACHE_CHECK([whether <inttypes.h> defines strtoumax as a macro],
-    gl_cv_func_strtoumax_macro,
-    [AC_EGREP_CPP([inttypes_h_defines_strtoumax], [#include <inttypes.h>
-#ifdef strtoumax
- inttypes_h_defines_strtoumax
-#endif],
-       gl_cv_func_strtoumax_macro=yes,
-       gl_cv_func_strtoumax_macro=no)])
-
-  if test "$gl_cv_func_strtoumax_macro" != yes; then
-    AC_REPLACE_FUNCS([strtoumax])
-    if test $ac_cv_func_strtoumax = no; then
-      gl_PREREQ_STRTOUMAX
+  dnl On OSF/1 5.1 with cc, this function is declared but not defined.
+  AC_CHECK_FUNCS_ONCE([strtoumax])
+  AC_CHECK_DECLS_ONCE([strtoumax])
+  if test "$ac_cv_have_decl_strtoumax" = yes; then
+    if test "$ac_cv_func_strtoumax" != yes; then
+      # HP-UX 11.11 has "#define strtoimax(...) ..." but no function.
+      REPLACE_STRTOUMAX=1
     fi
+  else
+    HAVE_DECL_STRTOUMAX=0
   fi
 ])
 

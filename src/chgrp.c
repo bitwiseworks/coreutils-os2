@@ -1,5 +1,5 @@
 /* chgrp -- change group ownership of files
-   Copyright (C) 1989-1991, 1995-2010 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,12 +26,11 @@
 #include "chown-core.h"
 #include "error.h"
 #include "fts_.h"
-#include "group-member.h"
 #include "quote.h"
 #include "root-dev-ino.h"
 #include "xstrtol.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "chgrp"
 
 #define AUTHORS \
@@ -90,7 +89,8 @@ parse_group (const char *name)
           unsigned long int tmp;
           if (! (xstrtoul (name, NULL, 10, &tmp, "") == LONGINT_OK
                  && tmp <= GID_T_MAX))
-            error (EXIT_FAILURE, 0, _("invalid group: %s"), quote (name));
+            error (EXIT_FAILURE, 0, _("invalid group: %s"),
+                   quote (name));
           gid = tmp;
         }
       endgrent ();		/* Save a file descriptor. */
@@ -103,8 +103,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -116,28 +115,34 @@ Usage: %s [OPTION]... GROUP FILE...\n\
 Change the group of each FILE to GROUP.\n\
 With --reference, change the group of each FILE to that of RFILE.\n\
 \n\
-  -c, --changes          like verbose but report only when a change is made\n\
-      --dereference      affect the referent of each symbolic link (this is\n\
-                         the default), rather than the symbolic link itself\n\
 "), stdout);
       fputs (_("\
-  -h, --no-dereference   affect each symbolic link instead of any referenced\n\
-                         file (useful only on systems that can change the\n\
+  -c, --changes          like verbose but report only when a change is made\n\
+  -f, --silent, --quiet  suppress most error messages\n\
+  -v, --verbose          output a diagnostic for every file processed\n\
+"), stdout);
+      fputs (_("\
+      --dereference      affect the referent of each symbolic link (this is\n\
+                         the default), rather than the symbolic link itself\n\
+  -h, --no-dereference   affect symbolic links instead of any referenced file\n\
+"), stdout);
+      fputs (_("\
+                         (useful only on systems that can change the\n\
                          ownership of a symlink)\n\
 "), stdout);
       fputs (_("\
-      --no-preserve-root  do not treat `/' specially (the default)\n\
-      --preserve-root    fail to operate recursively on `/'\n\
+      --no-preserve-root  do not treat '/' specially (the default)\n\
+      --preserve-root    fail to operate recursively on '/'\n\
 "), stdout);
       fputs (_("\
-  -f, --silent, --quiet  suppress most error messages\n\
       --reference=RFILE  use RFILE's group rather than specifying a\n\
                          GROUP value\n\
-  -R, --recursive        operate on files and directories recursively\n\
-  -v, --verbose          output a diagnostic for every file processed\n\
-\n\
 "), stdout);
       fputs (_("\
+  -R, --recursive        operate on files and directories recursively\n\
+"), stdout);
+      fputs (_("\
+\n\
 The following options modify how a hierarchy is traversed when the -R\n\
 option is also specified.  If more than one is specified, only the final\n\
 one takes effect.\n\
@@ -158,7 +163,7 @@ Examples:\n\
   %s -hR staff /u  Change the group of /u and subfiles to \"staff\".\n\
 "),
               program_name, program_name);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -285,7 +290,7 @@ main (int argc, char **argv)
       struct stat ref_stats;
       if (stat (reference_file, &ref_stats))
         error (EXIT_FAILURE, errno, _("failed to get attributes of %s"),
-               quote (reference_file));
+               quoteaf (reference_file));
 
       gid = ref_stats.st_gid;
       chopt.group_name = gid_to_name (ref_stats.st_gid);
@@ -303,7 +308,7 @@ main (int argc, char **argv)
       chopt.root_dev_ino = get_root_dev_ino (&dev_ino_buf);
       if (chopt.root_dev_ino == NULL)
         error (EXIT_FAILURE, errno, _("failed to get attributes of %s"),
-               quote ("/"));
+               quoteaf ("/"));
     }
 
   bit_flags |= FTS_DEFER_STAT;
@@ -313,5 +318,5 @@ main (int argc, char **argv)
 
   chopt_free (&chopt);
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

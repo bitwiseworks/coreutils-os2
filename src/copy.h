@@ -1,5 +1,5 @@
 /* core functions for copying files and directories
-   Copyright (C) 1989-1991, 1995-2010 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -124,8 +124,8 @@ struct cp_options
 
   /* If true, first try to open each existing destination nondirectory,
      then, if the open fails, unlink and try again.
-     This option must be set for `cp -f', in case the destination file
-     exists when the open is attempted.  It is irrelevant to `mv' since
+     This option must be set for 'cp -f', in case the destination file
+     exists when the open is attempted.  It is irrelevant to 'mv' since
      any destination is sure to be removed before the open.  */
   bool unlink_dest_after_failed_open;
 
@@ -157,6 +157,10 @@ struct cp_options
   bool preserve_ownership;
   bool preserve_mode;
   bool preserve_timestamps;
+  bool explicit_no_preserve_mode;
+
+  /* If true, attempt to set specified security context */
+  bool set_security_context;
 
   /* Enabled for mv, and for cp by the --preserve=links option.
      If true, attempt to preserve in the destination files any
@@ -189,8 +193,8 @@ struct cp_options
      propagates failure "out" to the caller, along with full diagnostics.
      If false, a failure to preserve file's security context does not
      change the invoking application's exit status, but may output diagnostics.
-     For example, with `cp --preserve=context` this flag is "true",
-     while with `cp --preserve=all` or `cp -a`, it is "false". */
+     For example, with 'cp --preserve=context' this flag is "true",
+     while with 'cp --preserve=all' or 'cp -a', it is "false". */
   bool require_preserve_context;
 
   /* If true, attempt to preserve extended attributes using libattr.
@@ -202,8 +206,8 @@ struct cp_options
      propagates failure "out" to the caller, along with full diagnostics.
      If false, a failure to preserve file's extended attributes does not
      change the invoking application's exit status, but may output diagnostics.
-     For example, with `cp --preserve=xattr` this flag is "true",
-     while with `cp --preserve=all` or `cp -a`, it is "false". */
+     For example, with 'cp --preserve=xattr' this flag is "true",
+     while with 'cp --preserve=all' or 'cp -a', it is "false". */
   bool require_preserve_xattr;
 
   /* This allows us to output warnings in cases 2 and 4 below,
@@ -250,7 +254,7 @@ struct cp_options
      that was specified on the command line.  Use it to avoid clobbering
      source files in commands like this:
        rm -rf a b c; mkdir a b c; touch a/f b/f; mv a/f b/f c
-     For now, it protects only regular files when copying (i.e. not renaming).
+     For now, it protects only regular files when copying (i.e., not renaming).
      When renaming, it protects all non-directories.
      Use dest_info_init to initialize it, or set it to NULL to disable
      this feature.  */
@@ -282,7 +286,7 @@ void dest_info_init (struct cp_options *);
 void src_info_init (struct cp_options *);
 
 void cp_options_default (struct cp_options *);
-bool chown_failure_ok (struct cp_options const *);
+bool chown_failure_ok (struct cp_options const *) _GL_ATTRIBUTE_PURE;
 mode_t cached_umask (void);
 
 #endif

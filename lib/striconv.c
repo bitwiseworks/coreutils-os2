@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Charset conversion.
-   Copyright (C) 2001-2007, 2009-2010 Free Software Foundation, Inc.
+   Copyright (C) 2001-2007, 2010-2016 Free Software Foundation, Inc.
    Written by Bruno Haible and Simon Josefsson.
 
    This program is free software; you can redistribute it and/or modify
@@ -15,8 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 
@@ -52,7 +49,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
 
   /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
   /* Set to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
 # endif
@@ -84,7 +82,7 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
             else
               return -1;
           }
-# if !defined _LIBICONV_VERSION && !defined __GLIBC__
+# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
         /* Irix iconv() inserts a NUL byte if it cannot convert.
            NetBSD iconv() inserts a question mark if it cannot convert.
            Only GNU libiconv and GNU libc are known to prefer to fail rather
@@ -99,7 +97,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
       }
     /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
     {
       char *outptr = tmpbuf;
       size_t outsize = tmpbufsize;
@@ -133,7 +132,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
 
   /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
   /* Return to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
 # endif
@@ -158,7 +158,7 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
             else
               goto fail;
           }
-# if !defined _LIBICONV_VERSION && !defined __GLIBC__
+# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
         /* Irix iconv() inserts a NUL byte if it cannot convert.
            NetBSD iconv() inserts a question mark if it cannot convert.
            Only GNU libiconv and GNU libc are known to prefer to fail rather
@@ -172,7 +172,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
       }
     /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
     {
       size_t res = iconv (cd, NULL, NULL, &outptr, &outsize);
 
@@ -209,7 +210,7 @@ str_cd_iconv (const char *src, iconv_t cd)
      to a trailing NUL byte in the output.  But not for UTF-7.  So that this
      function is usable for UTF-7, we have to exclude the NUL byte from the
      conversion and add it by hand afterwards.  */
-# if !defined _LIBICONV_VERSION && !defined __GLIBC__
+# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
   /* Irix iconv() inserts a NUL byte if it cannot convert.
      NetBSD iconv() inserts a question mark if it cannot convert.
      Only GNU libiconv and GNU libc are known to prefer to fail rather
@@ -274,7 +275,8 @@ str_cd_iconv (const char *src, iconv_t cd)
 
   /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
   /* Set to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
 # endif
@@ -326,7 +328,8 @@ str_cd_iconv (const char *src, iconv_t cd)
       }
     /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
 # if defined _LIBICONV_VERSION \
-     || !((__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) || defined __sun)
+     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+          || defined __sun)
     for (;;)
       {
         /* Here outptr + outbytes_remaining = result + result_size - 1.  */
@@ -412,7 +415,8 @@ str_iconv (const char *src, const char *from_codeset, const char *to_codeset)
       char *result;
 
       /* Avoid glibc-2.1 bug with EUC-KR.  */
-# if (__GLIBC__ - 0 == 2 && __GLIBC_MINOR__ - 0 <= 1) && !defined _LIBICONV_VERSION
+# if ((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
+     && !defined _LIBICONV_VERSION
       if (c_strcasecmp (from_codeset, "EUC-KR") == 0
           || c_strcasecmp (to_codeset, "EUC-KR") == 0)
         {

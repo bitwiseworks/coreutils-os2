@@ -1,7 +1,5 @@
-/* -*- buffer-read-only: t -*- vi: set ro: */
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /*
- * Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
+ * Copyright (C) 2008-2016 Free Software Foundation, Inc.
  * Written by Eric Blake
  *
  * This program is free software: you can redistribute it and/or modify
@@ -30,14 +28,11 @@ SIGNATURE_CHECK (strtod, double, (char const *, char **));
 #include <string.h>
 
 #include "isnand-nolibm.h"
+#include "minus-zero.h"
 #include "macros.h"
 
 /* Avoid requiring -lm just for fabs.  */
 #define FABS(d) ((d) < 0.0 ? -(d) : (d))
-
-/* HP cc on HP-UX 10.20 has a bug with the constant expression -0.0.
-   So we use -zero instead.  */
-double zero = 0.0;
 
 int
 main (void)
@@ -314,7 +309,7 @@ main (void)
     errno = 0;
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
-    ASSERT (!!signbit (result) == !!signbit (-zero)); /* IRIX 6.5, OSF/1 4.0 */
+    ASSERT (!!signbit (result) == !!signbit (minus_zerod)); /* IRIX 6.5, OSF/1 4.0 */
     ASSERT (ptr == input + 2);
     ASSERT (errno == 0);
   }
@@ -388,7 +383,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -409,8 +404,8 @@ main (void)
     errno = 0;
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
-    ASSERT (!!signbit (result) == !!signbit (-zero)); /* MacOS X 10.3, FreeBSD 6.2, IRIX 6.5, OSF/1 4.0 */
-    ASSERT (ptr == input + 2);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (!!signbit (result) == !!signbit (minus_zerod)); /* Mac OS X 10.3, FreeBSD 6.2, IRIX 6.5, OSF/1 4.0 */
+    ASSERT (ptr == input + 2);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -421,7 +416,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -432,7 +427,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -443,7 +438,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -454,7 +449,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -465,7 +460,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -476,7 +471,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -487,7 +482,7 @@ main (void)
     result = strtod (input, &ptr);
     ASSERT (result == 0.0);
     ASSERT (!signbit (result));
-    ASSERT (ptr == input + 1);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, AIX 7.1 */
+    ASSERT (ptr == input + 1);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, AIX 7.1 */
     ASSERT (errno == 0);
   }
   {
@@ -555,7 +550,7 @@ main (void)
        0 on negative underflow, even though quality of implementation
        demands preserving the sign.  Disable this test until fixed
        glibc is more prevalent.  */
-    ASSERT (!!signbit (result) == !!signbit (-zero)); /* glibc-2.3.6, mingw */
+    ASSERT (!!signbit (result) == !!signbit (minus_zerod)); /* glibc-2.3.6, mingw */
 #endif
     ASSERT (ptr == input + 10);
     ASSERT (errno == ERANGE);
@@ -708,8 +703,8 @@ main (void)
        worrying about.  */
     ASSERT (!!signbit (result1) != !!signbit (result2)); /* glibc-2.3.6, IRIX 6.5, OSF/1 5.1, mingw */
 # endif
-    ASSERT (ptr1 == input + 6);         /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
-    ASSERT (ptr2 == input + 6);         /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
+    ASSERT (ptr1 == input + 6);         /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
+    ASSERT (ptr2 == input + 6);         /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
     ASSERT (errno == 0);
 #else
     ASSERT (result1 == 0.0);
@@ -729,7 +724,7 @@ main (void)
     result = strtod (input, &ptr);
 #if 1 /* All known CPUs support NaNs.  */
     ASSERT (isnand (result));           /* OpenBSD 4.0, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
-    ASSERT (ptr == input + 6);          /* glibc-2.3.6, MacOS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
+    ASSERT (ptr == input + 6);          /* glibc-2.3.6, Mac OS X 10.3, FreeBSD 6.2, OpenBSD 4.0, AIX 7.1, HP-UX 11.11, IRIX 6.5, OSF/1 5.1, mingw */
     ASSERT (errno == 0);
 #else
     ASSERT (result == 0.0);
@@ -925,9 +920,9 @@ main (void)
         input[m] = '\0';
         errno = 0;
         result = strtod (input, &ptr);
-        ASSERT (result == 1.0);         /* MacOS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
+        ASSERT (result == 1.0);         /* Mac OS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
         ASSERT (ptr == input + m);      /* OSF/1 5.1 */
-        ASSERT (errno == 0);            /* MacOS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
+        ASSERT (errno == 0);            /* Mac OS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
       }
     free (input);
   }
@@ -951,9 +946,9 @@ main (void)
         input[m] = '\0';
         errno = 0;
         result = strtod (input, &ptr);
-        ASSERT (result == 1.0);         /* MacOS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
+        ASSERT (result == 1.0);         /* Mac OS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
         ASSERT (ptr == input + m);
-        ASSERT (errno == 0);            /* MacOS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
+        ASSERT (errno == 0);            /* Mac OS X 10.3, FreeBSD 6.2, NetBSD 3.0, OpenBSD 4.0, IRIX 6.5, OSF/1 5.1, mingw */
       }
     free (input);
   }
@@ -974,7 +969,7 @@ main (void)
         errno = 0;
         result = strtod (input, &ptr);
         ASSERT (result == 0.0);
-        ASSERT (!!signbit (result) == !!signbit (-zero)); /* IRIX 6.5, OSF/1 4.0 */
+        ASSERT (!!signbit (result) == !!signbit (minus_zerod)); /* IRIX 6.5, OSF/1 4.0 */
         ASSERT (ptr == input + m);
         ASSERT (errno == 0);
       }

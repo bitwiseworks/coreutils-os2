@@ -1,6 +1,5 @@
 /* echo.c, derived from code echo.c in Bash.
-   Copyright (C) 1987, 1989, 1991-1997, 1999-2005, 2007-2010 Free Software
-   Foundation, Inc.
+   Copyright (C) 1987-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,7 +19,7 @@
 #include <sys/types.h>
 #include "system.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "echo"
 
 #define AUTHORS \
@@ -36,8 +35,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -81,7 +79,7 @@ If -e is in effect, the following sequences are recognized:\n\
   \\xHH    byte with hexadecimal value HH (1 to 2 digits)\n\
 "), stdout);
       printf (USAGE_BUILTIN_WARNING, PROGRAM_NAME);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -103,7 +101,7 @@ hextobin (unsigned char c)
 }
 
 /* Print the words in LIST to standard output.  If the first word is
-   `-n', then don't print a trailing newline.  We also support the
+   '-n', then don't print a trailing newline.  We also support the
    echo syntax from Version 9 unix systems. */
 
 int
@@ -138,7 +136,7 @@ main (int argc, char **argv)
         {
           version_etc (stdout, PROGRAM_NAME, PACKAGE_NAME, Version, AUTHORS,
                        (char *) NULL);
-          exit (EXIT_SUCCESS);
+          return EXIT_SUCCESS;
         }
     }
 
@@ -206,7 +204,7 @@ just_echo:
                     {
                     case 'a': c = '\a'; break;
                     case 'b': c = '\b'; break;
-                    case 'c': exit (EXIT_SUCCESS);
+                    case 'c': return EXIT_SUCCESS;
                     case 'e': c = '\x1B'; break;
                     case 'f': c = '\f'; break;
                     case 'n': c = '\n'; break;
@@ -270,5 +268,5 @@ just_echo:
 
   if (display_return)
     putchar ('\n');
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }

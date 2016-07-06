@@ -1,5 +1,5 @@
 /* pr -- convert text files for printing.
-   Copyright (C) 1988, 1991, 1995-2010 Free Software Foundation, Inc.
+   Copyright (C) 1988-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /*  By Pete TerMaat, with considerable refinement by Roland Huebner.  */
-
+
 /* Things to watch: Sys V screws up on ...
    pr -n -3 -s: /usr/dict/words
    pr -m -o10 -n /usr/dict/words{,,,}
@@ -34,26 +34,26 @@
    Concept:
 
    If the input_tab_char differs from the default value TAB
-   (`-e[CHAR[...]]' is used), any input text tab is expanded to the
+   ('-e[CHAR[...]]' is used), any input text tab is expanded to the
    default width of 8 spaces (compare char_to_clump). - Same as SunOS
    does.
 
    The treatment of the number_separator (compare add_line_number):
-   The default value TAB of the number_separator (`-n[SEP[...]]') doesn't
-   be thought to be an input character. An optional `-e'-input has no
+   The default value TAB of the number_separator ('-n[SEP[...]]') doesn't
+   be thought to be an input character. An optional '-e'-input has no
    effect.
    -  With single column output
       only one POSIX requirement has to be met:
    The default n-separator should be a TAB. The consequence is a
    different width between the number and the text if the output position
-   of the separator changes, i.e. it depends upon the left margin used.
+   of the separator changes, i.e., it depends upon the left margin used.
    That's not nice but easy-to-use together with the defaults of other
    utilities, e.g. sort or cut. - Same as SunOS does.
    -  With multicolumn output
       two conflicting POSIX requirements exist:
-   First `default n-separator is TAB', second `output text columns shall
-   be of equal width'. Moreover POSIX specifies the number+separator a
-   part of the column, together with `-COLUMN' and `-a -COLUMN'.
+   First "default n-separator is TAB", second "output text columns shall
+   be of equal width". Moreover POSIX specifies the number+separator a
+   part of the column, together with '-COLUMN' and '-a -COLUMN'.
    (With -m output the number shall occupy each line only once. Exactly
    the same situation as single column output exists.)
       GNU pr gives priority to the 2nd requirement and observes POSIX
@@ -72,9 +72,9 @@
    PAGE_WIDTH may occur.
 
    The interference of the POSIX-compliant small letter options -w and -s:
-   (`interference' means `setting a _separator_ with -s switches off the
+   ("interference" means "setting a _separator_ with -s switches off the
    column structure and the default - not generally - page_width,
-   acts on -w option')
+   acts on -w option")
        options:       text form  / separator:     equivalent new options:
        -w l   -s[x]
     --------------------------------------------------------------------
@@ -125,7 +125,7 @@
                 two
                 three
                 four
-                will be printed with `-a -3' as
+                will be printed with '-a -3' as
                 one	two	three
                 four
 
@@ -216,8 +216,8 @@
                 is always printed with single column output only. The
                 TAB-width varies with the TAB-position, e.g. with the
                 left margin specified by -o option.
-                With multicolumn output priority is given to `equal width
-                of output columns' (a POSIX specification). The TAB-width
+                With multicolumn output priority is given to "equal width
+                of output columns" (a POSIX specification). The TAB-width
                 is fixed to the value of the 1st column and does not
                 change with different values of left margin. That means a
                 fixed number of spaces is always printed in the place of
@@ -244,18 +244,18 @@
    -s[CHAR], --separator[=CHAR]
                 Separate columns by a single character CHAR, default for
                 CHAR is the TAB character without -w and 'no char' with -w.
-                Without `-s' default separator `space' is set.
+                Without '-s' default separator 'space' is set.
                 -s[CHAR] turns off line truncation of all 3 column options
                 (-COLUMN|-a -COLUMN|-m) except -w is set. That is a POSIX
                 compliant formulation. The source code translates -s into
                 the new options -S and -J, also -W if required.
 
-   -S STRING, --sep-string[=STRING]
+   -S[STRING], --sep-string[=STRING]
                 Separate columns by any string STRING. The -S option
                 doesn't react upon the -W/-w option (unlike -s option
                 does). It defines a separator nothing else.
                 Without -S: Default separator TAB is used with -J and
-                `space' otherwise (same as -S" ").
+                'space' otherwise (same as -S" ").
                 With -S "": No separator is used.
                 Quotes should be used with blanks and some shell active
                 characters.
@@ -306,7 +306,6 @@
                 affect -W option.)
 
 */
-
 
 #include <config.h>
 
@@ -322,8 +321,9 @@
 #include "stdio--.h"
 #include "strftime.h"
 #include "xstrtol.h"
+#include "xdectoint.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "pr"
 
 #define AUTHORS \
@@ -424,9 +424,10 @@ static bool skip_to_page (uintmax_t page);
 static void print_header (void);
 static void pad_across_to (int position);
 static void add_line_number (COLUMN *p);
+static void getoptnum (const char *n_str, int min, int *num,
+                       const char *errfmt);
 static void getoptarg (char *arg, char switch_char, char *character,
                        int *number);
-void usage (int status);
 static void print_files (int number_of_files, char **av);
 static void init_parameters (int number_of_files);
 static void init_header (char const *filename, int desc);
@@ -436,7 +437,7 @@ static void init_store_cols (void);
 static void store_columns (void);
 static void balance (int total_stored);
 static void store_char (char c);
-static void pad_down (int lines);
+static void pad_down (unsigned int lines);
 static void read_rest_of_line (COLUMN *p);
 static void skip_read (COLUMN *p, int column_number);
 static void print_char (char c);
@@ -467,7 +468,7 @@ static size_t buff_allocated;
    we do column balancing on the last page. */
 static int *line_vector;
 
-/* Array of horizonal positions.
+/* Array of horizontal positions.
    For each line in line_vector, end_vector[line] is the horizontal
    position we are in after printing that line.  We keep track of this
    so that we know how much we need to pad to prepare for the next
@@ -631,10 +632,6 @@ static uintmax_t page_number;
    2    moo     4       hoo     6       zoo */
 static int line_number;
 
-/* With line_number overflow, we use power_10 to cut off the higher-order
-   digits of the line_number */
-static int power_10;
-
 /* (-n) True means lines should be preceded by numbers. */
 static bool numbered_lines = false;
 
@@ -689,7 +686,7 @@ static bool use_col_separator = false;
 
 /* String used to separate columns if the -S option has been specified.
    Default without -S but together with one of the column options
-   -a|COLUMN|-m is a `space' and with the -J option a `tab'. */
+   -a|COLUMN|-m is a 'space' and with the -J option a 'tab'. */
 static char *col_sep_string = (char *) "";
 static int col_sep_length = 0;
 static char *column_separator = (char *) " ";
@@ -773,18 +770,18 @@ static struct option const long_options[] =
 /* Return the number of columns that have either an open file or
    stored lines. */
 
-static int
+static unsigned int _GL_ATTRIBUTE_PURE
 cols_ready_to_print (void)
 {
   COLUMN *q;
-  int i;
-  int n;
+  unsigned int i;
+  unsigned int n;
 
   n = 0;
   for (q = column_vector, i = 0; i < columns; ++q, ++i)
-    if (q->status == OPEN ||
-        q->status == FF_FOUND ||	/* With -b: To print a header only */
-        (storing_columns && q->lines_stored > 0 && q->lines_to_print > 0))
+    if (q->status == OPEN
+        || q->status == FF_FOUND	/* With -b: To print a header only */
+        || (storing_columns && q->lines_stored > 0 && q->lines_to_print > 0))
       ++n;
   return n;
 }
@@ -824,19 +821,13 @@ first_last_page (int oi, char c, char const *pages)
 }
 
 /* Parse column count string S, and if it's valid (1 or larger and
-   within range of the type of `columns') set the global variables
-   columns and explicit_columns and return true.
-   Otherwise, exit with a diagnostic.  */
+   within range of the type of 'columns') set the global variables
+   columns and explicit_columns.  Otherwise, exit with a diagnostic.  */
+
 static void
 parse_column_count (char const *s)
 {
-  long int tmp_long;
-  if (xstrtol (s, NULL, 10, &tmp_long, "") != LONGINT_OK
-      || !(1 <= tmp_long && tmp_long <= INT_MAX))
-    error (EXIT_FAILURE, 0,
-           _("invalid number of columns: %s"), quote (s));
-
-  columns = tmp_long;
+  getoptnum (s, 1, &columns, _("invalid number of columns"));
   explicit_columns = true;
 }
 
@@ -900,7 +891,7 @@ main (int argc, char **argv)
       switch (c)
         {
         case 1:			/* Non-option argument. */
-          /* long option --page dominates old `+FIRST_PAGE ...'.  */
+          /* long option --page dominates old '+FIRST_PAGE ...'.  */
           if (! (first_page_number == 0
                  && *optarg == '+' && first_last_page (-2, '+', optarg + 1)))
             file_names[n_files++] = optarg;
@@ -910,7 +901,7 @@ main (int argc, char **argv)
           {			/* dominates old opt +... */
             if (! optarg)
               error (EXIT_FAILURE, 0,
-                     _("`--pages=FIRST_PAGE[:LAST_PAGE]' missing argument"));
+                     _("'--pages=FIRST_PAGE[:LAST_PAGE]' missing argument"));
             else if (! first_last_page (oi, 0, optarg))
               error (EXIT_FAILURE, 0, _("invalid page range %s"),
                      quote (optarg));
@@ -971,18 +962,9 @@ main (int argc, char **argv)
           join_lines = true;
           break;
         case 'l':
-          {
-            long int tmp_long;
-            if (xstrtol (optarg, NULL, 10, &tmp_long, "") != LONGINT_OK
-                || tmp_long <= 0 || tmp_long > INT_MAX)
-              {
-                error (EXIT_FAILURE, 0,
-                       _("`-l PAGE_LENGTH' invalid number of lines: %s"),
-                       quote (optarg));
-              }
-            lines_per_page = tmp_long;
-            break;
-          }
+          getoptnum (optarg, 1, &lines_per_page,
+                     _("'-l PAGE_LENGTH' invalid number of lines"));
+          break;
         case 'm':
           parallel_files = true;
           storing_columns = false;
@@ -995,28 +977,13 @@ main (int argc, char **argv)
           break;
         case 'N':
           skip_count = false;
-          {
-            long int tmp_long;
-            if (xstrtol (optarg, NULL, 10, &tmp_long, "") != LONGINT_OK
-                || tmp_long > INT_MAX)
-              {
-                error (EXIT_FAILURE, 0,
-                       _("`-N NUMBER' invalid starting line number: %s"),
-                       quote (optarg));
-              }
-            start_line_num = tmp_long;
-            break;
-          }
+          getoptnum (optarg, INT_MIN, &start_line_num,
+                     _("'-N NUMBER' invalid starting line number"));
+          break;
         case 'o':
-          {
-            long int tmp_long;
-            if (xstrtol (optarg, NULL, 10, &tmp_long, "") != LONGINT_OK
-                || tmp_long < 0 || tmp_long > INT_MAX)
-              error (EXIT_FAILURE, 0,
-                     _("`-o MARGIN' invalid line offset: %s"), quote (optarg));
-            chars_per_margin = tmp_long;
-            break;
-          }
+          getoptnum (optarg, 0, &chars_per_margin,
+                     _("'-o MARGIN' invalid line offset"));
+          break;
         case 'r':
           ignore_failed_opens = true;
           break;
@@ -1050,29 +1017,19 @@ main (int argc, char **argv)
           old_options = true;
           old_w = true;
           {
-            long int tmp_long;
-            if (xstrtol (optarg, NULL, 10, &tmp_long, "") != LONGINT_OK
-                || tmp_long <= 0 || tmp_long > INT_MAX)
-              error (EXIT_FAILURE, 0,
-                     _("`-w PAGE_WIDTH' invalid number of characters: %s"),
-                     quote (optarg));
-            if (!truncate_lines)
-              chars_per_line = tmp_long;
-            break;
+            int tmp_cpl;
+            getoptnum (optarg, 1, &tmp_cpl,
+                       _("'-w PAGE_WIDTH' invalid number of characters"));
+            if (! truncate_lines)
+              chars_per_line = tmp_cpl;
           }
+          break;
         case 'W':
           old_w = false;			/* dominates -w */
           truncate_lines = true;
-          {
-            long int tmp_long;
-            if (xstrtol (optarg, NULL, 10, &tmp_long, "") != LONGINT_OK
-                || tmp_long <= 0 || tmp_long > INT_MAX)
-              error (EXIT_FAILURE, 0,
-                     _("`-W PAGE_WIDTH' invalid number of characters: %s"),
-                     quote (optarg));
-            chars_per_line = tmp_long;
-            break;
-          }
+          getoptnum (optarg, 1, &chars_per_line,
+                     _("'-W PAGE_WIDTH' invalid number of characters"));
+          break;
         case_GETOPT_HELP_CHAR;
         case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
         default:
@@ -1165,19 +1122,27 @@ main (int argc, char **argv)
         print_files (n_files, file_names);
       else
         {
-          int i;
+          unsigned int i;
           for (i = 0; i < n_files; i++)
             print_files (1, &file_names[i]);
         }
     }
 
   cleanup ();
+  IF_LINT (free (file_names));
 
   if (have_read_stdin && fclose (stdin) == EOF)
     error (EXIT_FAILURE, errno, _("standard input"));
-  if (failed_opens)
-    exit (EXIT_FAILURE);
-  exit (EXIT_SUCCESS);
+  return failed_opens ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+/* Parse numeric arguments, ensuring MIN <= number <= INT_MAX.  */
+
+static void
+getoptnum (const char *n_str, int min, int *num, const char *err)
+{
+  intmax_t tnum = xdectoimax (n_str, min, INT_MAX, "", err, 0);
+  *num = tnum;
 }
 
 /* Parse options of the form -scNNN.
@@ -1195,17 +1160,17 @@ getoptarg (char *arg, char switch_char, char *character, int *number)
     {
       long int tmp_long;
       if (xstrtol (arg, NULL, 10, &tmp_long, "") != LONGINT_OK
-          || tmp_long <= 0 || tmp_long > INT_MAX)
+          || tmp_long <= 0 || INT_MAX < tmp_long)
         {
-          error (0, 0,
-             _("`-%c' extra characters or invalid number in the argument: %s"),
+          error (0, INT_MAX < tmp_long ?  EOVERFLOW : errno,
+             _("'-%c' extra characters or invalid number in the argument: %s"),
                  switch_char, quote (arg));
           usage (EXIT_FAILURE);
         }
       *number = tmp_long;
     }
 }
-
+
 /* Set parameters related to formatting. */
 
 static void
@@ -1269,20 +1234,19 @@ init_parameters (int number_of_files)
 
   if (numbered_lines)
     {
-      int tmp_i;
       int chars_per_default_tab = 8;
 
       line_count = start_line_num;
 
       /* To allow input tab-expansion (-e sensitive) use:
          if (number_separator == input_tab_char)
-           number_width = chars_per_number +
-             TAB_WIDTH (chars_per_input_tab, chars_per_number);   */
+           number_width = chars_per_number
+             + TAB_WIDTH (chars_per_input_tab, chars_per_number);   */
 
       /* Estimate chars_per_text without any margin and keep it constant. */
       if (number_separator == '\t')
-        number_width = chars_per_number +
-          TAB_WIDTH (chars_per_default_tab, chars_per_number);
+        number_width = (chars_per_number
+                        + TAB_WIDTH (chars_per_default_tab, chars_per_number));
       else
         number_width = chars_per_number + 1;
 
@@ -1290,16 +1254,10 @@ init_parameters (int number_of_files)
          printing files in parallel. */
       if (parallel_files)
         chars_used_by_number = number_width;
-
-      /* We use power_10 to cut off the higher-order digits of the
-         line_number in function add_line_number */
-      tmp_i = chars_per_number;
-      for (power_10 = 1; tmp_i > 0; --tmp_i)
-        power_10 = 10 * power_10;
     }
 
-  chars_per_column = (chars_per_line - chars_used_by_number -
-                     (columns - 1) * col_sep_length) / columns;
+  chars_per_column = (chars_per_line - chars_used_by_number
+                      - (columns - 1) * col_sep_length) / columns;
 
   if (chars_per_column < 1)
     error (EXIT_FAILURE, 0, _("page width too narrow"));
@@ -1307,7 +1265,8 @@ init_parameters (int number_of_files)
   if (numbered_lines)
     {
       free (number_buff);
-      number_buff = xmalloc (2 * chars_per_number);
+      number_buff = xmalloc (MAX (chars_per_number,
+                                  INT_STRLEN_BOUND (line_number)) + 1);
     }
 
   /* Pick the maximum between the tab width and the width of an
@@ -1318,7 +1277,7 @@ init_parameters (int number_of_files)
   free (clump_buff);
   clump_buff = xmalloc (MAX (8, chars_per_input_tab));
 }
-
+
 /* Open the necessary files,
    maintaining a COLUMN structure for each column.
 
@@ -1394,7 +1353,7 @@ init_fps (int number_of_files, char **av)
   files_ready_to_read = total_files;
   return true;
 }
-
+
 /* Determine print_func and char_func, the functions
    used by each column for printing and/or storing.
 
@@ -1414,7 +1373,7 @@ init_funcs (void)
   else
     {
       /* When numbering lines of parallel files, we enlarge the
-         first column to accomodate the number.  Looks better than
+         first column to accommodate the number.  Looks better than
          the Sys V approach. */
       if (parallel_files && numbered_lines)
         h_next = h + chars_per_column + number_width;
@@ -1481,7 +1440,7 @@ init_funcs (void)
   p->numbered = numbered_lines && (!parallel_files || i == 1);
   p->start_position = h;
 }
-
+
 /* Open a file.  Return true if successful.
 
    With each file p, p->full_page_printed is initialized,
@@ -1505,7 +1464,7 @@ open_file (char *name, COLUMN *p)
     {
       failed_opens = true;
       if (!ignore_failed_opens)
-        error (0, errno, "%s", name);
+        error (0, errno, "%s", quotef (name));
       return false;
     }
   fadvise (p->fp, FADVISE_SEQUENTIAL);
@@ -1529,9 +1488,9 @@ close_file (COLUMN *p)
   if (p->status == CLOSED)
     return;
   if (ferror (p->fp))
-    error (EXIT_FAILURE, errno, "%s", p->name);
+    error (EXIT_FAILURE, errno, "%s", quotef (p->name));
   if (fileno (p->fp) != STDIN_FILENO && fclose (p->fp) != 0)
-    error (EXIT_FAILURE, errno, "%s", p->name);
+    error (EXIT_FAILURE, errno, "%s", quotef (p->name));
 
   if (!parallel_files)
     {
@@ -1605,7 +1564,7 @@ reset_status (void)
         files_ready_to_read = 1;
     }
 }
-
+
 /* Print a single file, or multiple files in parallel.
 
    Set up the list of columns, opening the necessary files.
@@ -1640,7 +1599,7 @@ print_files (int number_of_files, char **av)
   while (print_page ())
     ;
 }
-
+
 /* Initialize header information.
    If DESC is non-negative, it is a file descriptor open to
    FILENAME for reading.  */
@@ -1689,7 +1648,7 @@ init_header (char const *filename, int desc)
                             - mbswidth (date_text, 0)
                             - mbswidth (file_text, 0));
 }
-
+
 /* Set things up for printing a page
 
    Scan through the columns ...
@@ -1828,7 +1787,7 @@ print_page (void)
               --p->lines_to_print;
               if (p->lines_to_print <= 0)
                 {
-                  if (cols_ready_to_print () <= 0)
+                  if (cols_ready_to_print () == 0)
                     break;
                 }
 
@@ -1837,8 +1796,8 @@ print_page (void)
                 {
                   if (empty_line)
                     align_empty_cols = true;
-                  else if (p->status == CLOSED ||
-                           (p->status == ON_HOLD && FF_only))
+                  else if (p->status == CLOSED
+                           || (p->status == ON_HOLD && FF_only))
                     align_column (p);
                 }
             }
@@ -1862,7 +1821,7 @@ print_page (void)
           --lines_left_on_page;
         }
 
-      if (cols_ready_to_print () <= 0 && !extremities)
+      if (cols_ready_to_print () == 0 && !extremities)
         break;
 
       if (double_space && pv)
@@ -1887,14 +1846,14 @@ print_page (void)
       print_a_FF = false;
     }
 
-  if (last_page_number < page_number)
+  if (last_page_number < ++page_number)
     return false;		/* Stop printing with LAST_PAGE */
 
   reset_status ();		/* Change ON_HOLD to OPEN. */
 
   return true;			/* More pages to go. */
 }
-
+
 /* Allocate space for storing columns.
 
    This is necessary when printing multiple columns from a single file.
@@ -2030,26 +1989,20 @@ add_line_number (COLUMN *p)
 {
   int i;
   char *s;
-  int left_cut;
+  int num_width;
 
   /* Cutting off the higher-order digits is more informative than
-     lower-order cut off*/
-  if (line_number < power_10)
-    sprintf (number_buff, "%*d", chars_per_number, line_number);
-  else
-    {
-      left_cut = line_number % power_10;
-      sprintf (number_buff, "%0*d", chars_per_number, left_cut);
-    }
+     lower-order cut off. */
+  num_width = sprintf (number_buff, "%*d", chars_per_number, line_number);
   line_number++;
-  s = number_buff;
+  s = number_buff + (num_width - chars_per_number);
   for (i = chars_per_number; i > 0; i--)
     (p->char_func) (*s++);
 
   if (columns > 1)
     {
       /* Tabification is assumed for multiple columns, also for n-separators,
-         but `default n-separator = TAB' hasn't been given priority over
+         but 'default n-separator = TAB' hasn't been given priority over
          equal column_width also specified by POSIX. */
       if (number_separator == '\t')
         {
@@ -2074,7 +2027,7 @@ add_line_number (COLUMN *p)
   if (truncate_lines && !parallel_files)
     input_position += number_width;
 }
-
+
 /* Print (or store) padding until the current horizontal position
    is position. */
 
@@ -2099,9 +2052,9 @@ pad_across_to (int position)
    Otherwise, use newlines. */
 
 static void
-pad_down (int lines)
+pad_down (unsigned int lines)
 {
-  int i;
+  unsigned int i;
 
   if (use_form_feed)
     putchar ('\f');
@@ -2210,7 +2163,7 @@ skip_read (COLUMN *p, int column_number)
     if ((!parallel_files || column_number == 1) && !single_ff)
       ++line_count;
 }
-
+
 /* If we're tabifying output,
 
    When print_char encounters white space it keeps track
@@ -2399,7 +2352,7 @@ print_header (void)
   /* The translator must ensure that formatting the translation of
      "Page %"PRIuMAX does not generate more than (sizeof page_text - 1)
      bytes.  */
-  sprintf (page_text, _("Page %"PRIuMAX), page_number++);
+  sprintf (page_text, _("Page %"PRIuMAX), page_number);
   available_width = header_width_available - mbswidth (page_text, 0);
   available_width = MAX (0, available_width);
   lhs_spaces = available_width >> 1;
@@ -2695,7 +2648,7 @@ char_to_clump (char c)
               width = 2;
               chars = 2;
               *s++ = '^';
-              *s++ = c ^ 0100;
+              *s = c ^ 0100;
             }
           else
             {
@@ -2744,7 +2697,7 @@ char_to_clump (char c)
 /* We've just printed some files and need to clean up things before
    looking for more options and printing the next batch of files.
 
-   Free everything we've xmalloc'ed, except `header'. */
+   Free everything we've xmalloc'ed, except 'header'. */
 
 static void
 cleanup (void)
@@ -2756,15 +2709,14 @@ cleanup (void)
   free (end_vector);
   free (buff);
 }
-
+
 /* Complain, print a usage message, and die. */
 
 void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("\
@@ -2774,11 +2726,11 @@ Usage: %s [OPTION]... [FILE]...\n\
 
       fputs (_("\
 Paginate or columnate FILE(s) for printing.\n\
-\n\
 "), stdout);
-      fputs (_("\
-Mandatory arguments to long options are mandatory for short options too.\n\
-"), stdout);
+
+      emit_stdin_note ();
+      emit_mandatory_arg_note ();
+
       fputs (_("\
   +FIRST_PAGE[:LAST_PAGE], --pages=FIRST_PAGE[:LAST_PAGE]\n\
                     begin [stop] printing with page FIRST_[LAST_]PAGE\n\
@@ -2817,7 +2769,10 @@ Mandatory arguments to long options are mandatory for short options too.\n\
       fputs (_("\
   -l, --length=PAGE_LENGTH\n\
                     set the page length to PAGE_LENGTH (66) lines\n\
-                    (default number of lines of text 56, and with -F 63)\n\
+                    (default number of lines of text 56, and with -F 63).\n\
+                    implies -t if PAGE_LENGTH <= 10\n\
+"), stdout);
+      fputs (_("\
   -m, --merge       print all files in parallel, one in each column,\n\
                     truncate lines, but join lines of full length with -J\n\
 "), stdout);
@@ -2839,16 +2794,20 @@ Mandatory arguments to long options are mandatory for short options too.\n\
       fputs (_("\
   -s[CHAR], --separator[=CHAR]\n\
                     separate columns by a single character, default for CHAR\n\
-                    is the <TAB> character without -w and \'no char\' with -w\n\
+                    is the <TAB> character without -w and \'no char\' with -w.\
+\n\
                     -s[CHAR] turns off line truncation of all 3 column\n\
                     options (-COLUMN|-a -COLUMN|-m) except -w is set\n\
 "), stdout);
       fputs (_("\
-  -SSTRING, --sep-string[=STRING]\n\
+  -S[STRING], --sep-string[=STRING]\n\
                     separate columns by STRING,\n\
                     without -S: Default separator <TAB> with -J and <space>\n\
                     otherwise (same as -S\" \"), no effect on column options\n\
-  -t, --omit-header  omit page headers and trailers\n\
+"), stdout);
+      fputs (_("\
+  -t, --omit-header  omit page headers and trailers;\n\
+                     implied if PAGE_LENGTH <= 10\n\
 "), stdout);
       fputs (_("\
   -T, --omit-pagination\n\
@@ -2868,12 +2827,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      fputs (_("\
-\n\
--t is implied if PAGE_LENGTH <= 10.  With no FILE, or when FILE is -, read\n\
-standard input.\n\
-"), stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }

@@ -1206,7 +1206,7 @@
 	* tests/Coreutils.pm: New keywords, ENV and ENV_DEL, to support
 	tests/misc/date.
 
-	With todays additions, the generated shell script,
+	With today's additions, the generated shell script,
 	tests/date/date-tests had becoming far too large (over 350KB),
 	so use the superior-but-perl-requiring framework instead.
 	* tests/date/Test.pm: Move all tests from here...
@@ -9086,7 +9086,7 @@
 
 	split's --verbose option did nothing [broken in 4.5.10 and 5.0]
 	* src/split.c (longopts): Use `1', not `0' as the value for
-	for &verbose.  Reported by Keith Thompson.
+	&verbose.  Reported by Keith Thompson.
 
 	Test for the above fix.
 	* tests/misc/split-a: Also use --verbose and compare stderr
@@ -11609,7 +11609,7 @@
 
 	-----
 
-	Copyright (C) 2002-2005, 2009-2010 Free Software Foundation, Inc.
+	Copyright (C) 2002-2016 Free Software Foundation, Inc.
 
 	Copying and distribution of this file, with or without
 	modification, are permitted provided the copyright notice

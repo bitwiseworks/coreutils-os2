@@ -1,5 +1,5 @@
 /* logname -- print user's login name
-   Copyright (C) 1990-1997, 1999-2005, 2007-2010 Free Software Foundation, Inc.
+   Copyright (C) 1990-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #include "long-options.h"
 #include "quote.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "logname"
 
 #define AUTHORS proper_name ("FIXME: unknown")
@@ -33,8 +33,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]\n"), program_name);
@@ -44,7 +43,7 @@ Print the name of the current user.\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -73,15 +72,12 @@ main (int argc, char **argv)
       usage (EXIT_FAILURE);
     }
 
-  /* POSIX requires using getlogin (or equivalent code).  */
+  /* POSIX requires using getlogin (or equivalent code) and prohibits
+     using a fallback technique.  */
   cp = getlogin ();
-  if (cp)
-    {
-      puts (cp);
-      exit (EXIT_SUCCESS);
-    }
-  /* POSIX prohibits using a fallback technique.  */
+  if (! cp)
+    error (EXIT_FAILURE, 0, _("no login name"));
 
-  error (0, 0, _("no login name"));
-  exit (EXIT_FAILURE);
+  puts (cp);
+  return EXIT_SUCCESS;
 }

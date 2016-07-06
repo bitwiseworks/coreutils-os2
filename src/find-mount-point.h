@@ -1,5 +1,5 @@
 /* find-mount-point.h -- find the root mount point for a file.
-   Copyright (C) 2010 Free Software Foundation, Inc.
+   Copyright (C) 2010-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,4 +14,4 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern char* find_mount_point (const char *, const struct stat *);
+extern char *find_mount_point (char const *, struct stat const *);

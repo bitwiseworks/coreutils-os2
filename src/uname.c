@@ -1,7 +1,6 @@
 /* uname -- print system information
 
-   Copyright (C) 1989, 1992-1993, 1996-1997, 1999-2005, 2007-2010 Free Software
-   Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -55,13 +54,13 @@
 #include "quote.h"
 #include "uname.h"
 
-/* The official name of this program (e.g., no `g' prefix).  */
+/* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME (uname_mode == UNAME_UNAME ? "uname" : "arch")
 
 #define AUTHORS proper_name ("David MacKenzie")
 #define ARCH_AUTHORS "David MacKenzie", "Karel Zak"
 
-/* Values that are bitwise or'd into `toprint'. */
+/* Values that are bitwise or'd into 'toprint'. */
 /* Kernel name. */
 #define PRINT_KERNEL_NAME 1
 
@@ -115,8 +114,7 @@ void
 usage (int status)
 {
   if (status != EXIT_SUCCESS)
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+    emit_try_help ();
   else
     {
       printf (_("Usage: %s [OPTION]...\n"), program_name);
@@ -135,8 +133,8 @@ Print certain system information.  With no OPTION, same as -s.\n\
           fputs (_("\
   -v, --kernel-version     print the kernel version\n\
   -m, --machine            print the machine hardware name\n\
-  -p, --processor          print the processor type or \"unknown\"\n\
-  -i, --hardware-platform  print the hardware platform or \"unknown\"\n\
+  -p, --processor          print the processor type (non-portable)\n\
+  -i, --hardware-platform  print the hardware platform (non-portable)\n\
   -o, --operating-system   print the operating system\n\
 "), stdout);
         }
@@ -150,7 +148,7 @@ Print machine architecture.\n\
 
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
+      emit_ancillary_info (PROGRAM_NAME);
     }
   exit (status);
 }
@@ -323,9 +321,9 @@ main (int argc, char **argv)
           if (element == unknown)
             {
               cpu_type_t cputype;
-              size_t s = sizeof cputype;
+              size_t cs = sizeof cputype;
               NXArchInfo const *ai;
-              if (sysctlbyname ("hw.cputype", &cputype, &s, NULL, 0) == 0
+              if (sysctlbyname ("hw.cputype", &cputype, &cs, NULL, 0) == 0
                   && (ai = NXGetArchInfoFromCpuType (cputype,
                                                      CPU_SUBTYPE_MULTIPLE))
                   != NULL)
@@ -333,7 +331,7 @@ main (int argc, char **argv)
 
               /* Hack "safely" around the ppc vs. powerpc return value. */
               if (cputype == CPU_TYPE_POWERPC
-                  && strncmp (element, "ppc", 3) == 0)
+                  && STRNCMP_LIT (element, "ppc") == 0)
                 element = "powerpc";
             }
 # endif
@@ -373,5 +371,5 @@ main (int argc, char **argv)
 
   putchar ('\n');
 
-  exit (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }
