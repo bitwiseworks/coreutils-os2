@@ -34,7 +34,9 @@ AC_DEFUN([gl_FUNC_MKNOD],
              #endif
 ]], [[/* Indeterminate for super-user, assume no.  Why are you running
          configure as root, anyway?  */
+    #ifndef __OS2__ // we are always root, so don't care
       if (geteuid () == ROOT_UID) return 99;
+    #endif
       if (mknod ("conftest.fifo", S_IFIFO | 0600, 0)) return 2;]])],
          [gl_cv_func_mknod_works=yes],
          [if test $? = 99 && test x"$FORCE_UNSAFE_CONFIGURE" = x; then
