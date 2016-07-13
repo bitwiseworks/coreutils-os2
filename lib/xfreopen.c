@@ -29,8 +29,7 @@
 void
 xfreopen (char const *filename, char const *mode, FILE *fp)
 {
-  FILE *f; // YD without this, it seems to trigger a bug with gcc444 and -O2
-  if (!(f==freopen (filename, mode, fp)))
+  if (!freopen (filename, mode, fp))
     {
       char const *f = (filename ? filename
                        : (fp == stdin ? _("stdin")
