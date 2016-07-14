@@ -129,7 +129,7 @@ enum
   NOT_AN_INODE_NUMBER = 0
 };
 
-#if D_INO_IN_DIRENT && !defined(__INNOTEK_LIBC__) /* this will be fix in 0.7 and will then be removed! */
+#ifdef D_INO_IN_DIRENT
 # define D_INO(dp) (dp)->d_ino
 #else
 /* Some systems don't have inodes, so fake them to avoid lots of ifdefs.  */
@@ -1416,11 +1416,7 @@ fts_build (register FTS *sp, int type)
                     if (0 <= dir_fd)
                       set_cloexec_flag (dir_fd, true);
                   }
-#ifdef __KLIBC__ /* will be fixed in libc 0.7 */
-                if (/*dir_fd < 0 ||*/ fts_safe_changedir(sp, cur, dir_fd, cur->fts_accpath)) {
-#else
                 if (dir_fd < 0 || fts_safe_changedir(sp, cur, dir_fd, NULL)) {
-#endif
                         if (nlinks && type == BREAD)
                                 cur->fts_errno = errno;
                         cur->fts_flags |= FTS_DONTCHDIR;
