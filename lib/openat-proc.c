@@ -131,6 +131,5 @@ openat_proc_name (char buf[OPENAT_BUFFER_SIZE], int fd, char const *file)
 #endif
 
   strcpy (result + dirlen, file);
-printf("bww trace 0 open_procat: %s\n", result);
   return result;
 }
