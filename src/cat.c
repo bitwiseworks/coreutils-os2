@@ -544,6 +544,10 @@ main (int argc, char **argv)
   bool show_tabs = false;
   int file_open_mode = O_RDONLY;
 
+#ifdef __KLIBC__
+  _wildcard (&argc, &argv);
+#endif
+
   static struct option const long_options[] =
   {
     {"number-nonblank", no_argument, NULL, 'b'},

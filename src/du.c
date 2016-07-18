@@ -737,6 +737,10 @@ main (int argc, char **argv)
   cwd_only[0] = bad_cast (".");
   cwd_only[1] = NULL;
 
+#ifdef __KLIBC__
+  _wildcard (&argc, &argv);
+#endif
+
   initialize_main (&argc, &argv);
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");
