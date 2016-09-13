@@ -125,8 +125,7 @@ openat_proc_name (char buf[OPENAT_BUFFER_SIZE], int fd, char const *file)
       }
 
     strcpy (result, dir);
-    result[dirlen] = '/';
-    dirlen += 1;
+    result[dirlen++] = '/';
   }
 #endif
 
