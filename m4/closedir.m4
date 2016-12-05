@@ -23,9 +23,8 @@ AC_DEFUN([gl_FUNC_CLOSEDIR],
     fi
   ])
   dnl Replace closedir() for supporting the gnulib-defined dirfd() function.
-  if test -z "${host_os##os2*}"; then
-    if test $HAVE_OPENDIR = 1; then
-      REPLACE_OPENDIR=1
-    fi
-  fi
+  case $host_os,$HAVE_CLOSEDIR in
+    os2*,1)
+      REPLACE_CLOSEDIR=1;;
+  esac
 ])
