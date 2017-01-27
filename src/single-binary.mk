@@ -19,7 +19,6 @@ src_libsinglebin_chroot_a_CFLAGS = "-Dmain=single_binary_main_chroot (int, char 
 # Command df
 noinst_LIBRARIES += src/libsinglebin_df.a
 src_libsinglebin_df_a_SOURCES =   src/df.c src/find-mount-point.c
-src_libsinglebin_df_a_ldadd =   $(LIBICONV)
 src_libsinglebin_df_a_CFLAGS = "-Dmain=single_binary_main_df (int, char **);  int single_binary_main_df"  -Dusage=_usage_df $(src_coreutils_CFLAGS)
 # Command hostid
 noinst_LIBRARIES += src/libsinglebin_hostid.a
@@ -37,7 +36,6 @@ src_libsinglebin_pinky_a_CFLAGS = "-Dmain=single_binary_main_pinky (int, char **
 # Command stdbuf
 noinst_LIBRARIES += src/libsinglebin_stdbuf.a
 src_libsinglebin_stdbuf_a_SOURCES = src/stdbuf.c
-src_libsinglebin_stdbuf_a_ldadd =   $(LIBICONV)
 src_libsinglebin_stdbuf_a_CFLAGS = "-Dmain=single_binary_main_stdbuf (int, char **);  int single_binary_main_stdbuf"  -Dusage=_usage_stdbuf $(src_coreutils_CFLAGS)
 # Command stty
 noinst_LIBRARIES += src/libsinglebin_stty.a
@@ -62,6 +60,11 @@ noinst_LIBRARIES += src/libsinglebin__.a
 src_libsinglebin___a_SOURCES =   src/lbracket.c
 src_libsinglebin___a_ldadd =   $(src_test_LDADD)
 src_libsinglebin___a_CFLAGS = "-Dmain=single_binary_main__ (int, char **);  int single_binary_main__"  -Dusage=_usage__ $(src_coreutils_CFLAGS)
+# Command b2sum
+noinst_LIBRARIES += src/libsinglebin_b2sum.a
+src_libsinglebin_b2sum_a_SOURCES =   src/md5sum.c src/blake2/blake2.h src/blake2/blake2-impl.h src/blake2/blake2b-ref.c src/blake2/b2sum.c src/blake2/b2sum.h
+src_libsinglebin_b2sum_a_CFLAGS = "-Dmain=single_binary_main_b2sum (int, char **);  int single_binary_main_b2sum"  -Dusage=_usage_b2sum $(src_coreutils_CFLAGS)
+src_libsinglebin_b2sum_a_CPPFLAGS =   -include config.h -DHASH_ALGO_BLAKE2=1 $(AM_CPPFLAGS)
 # Command base64
 noinst_LIBRARIES += src/libsinglebin_base64.a
 src_libsinglebin_base64_a_SOURCES = src/base64.c
@@ -79,7 +82,6 @@ src_libsinglebin_basename_a_CFLAGS = "-Dmain=single_binary_main_basename (int, c
 # Command cat
 noinst_LIBRARIES += src/libsinglebin_cat.a
 src_libsinglebin_cat_a_SOURCES = src/cat.c
-src_libsinglebin_cat_a_ldadd =   $(LIBICONV)
 src_libsinglebin_cat_a_CFLAGS = "-Dmain=single_binary_main_cat (int, char **);  int single_binary_main_cat"  -Dusage=_usage_cat $(src_coreutils_CFLAGS)
 # Command chcon
 noinst_LIBRARIES += src/libsinglebin_chcon.a
@@ -109,7 +111,7 @@ src_libsinglebin_comm_a_CFLAGS = "-Dmain=single_binary_main_comm (int, char **);
 # Command cp
 noinst_LIBRARIES += src/libsinglebin_cp.a
 src_libsinglebin_cp_a_SOURCES =   src/cp.c $(copy_sources) $(selinux_sources)
-src_libsinglebin_cp_a_ldadd =   $(copy_ldadd)  $(LIBICONV)
+src_libsinglebin_cp_a_ldadd =   $(copy_ldadd)
 src_libsinglebin_cp_a_CFLAGS = "-Dmain=single_binary_main_cp (int, char **);  int single_binary_main_cp"  -Dusage=_usage_cp $(src_coreutils_CFLAGS)
 # Command csplit
 noinst_LIBRARIES += src/libsinglebin_csplit.a
@@ -145,7 +147,6 @@ src_libsinglebin_dirname_a_CFLAGS = "-Dmain=single_binary_main_dirname (int, cha
 # Command du
 noinst_LIBRARIES += src/libsinglebin_du.a
 src_libsinglebin_du_a_SOURCES = src/du.c
-src_libsinglebin_du_a_ldadd =   $(LIBICONV)
 src_libsinglebin_du_a_CFLAGS = "-Dmain=single_binary_main_du (int, char **);  int single_binary_main_du"  -Dusage=_usage_du $(src_coreutils_CFLAGS)
 # Command echo
 noinst_LIBRARIES += src/libsinglebin_echo.a
@@ -157,7 +158,7 @@ src_libsinglebin_env_a_SOURCES = src/env.c
 src_libsinglebin_env_a_CFLAGS = "-Dmain=single_binary_main_env (int, char **);  int single_binary_main_env"  -Dusage=_usage_env $(src_coreutils_CFLAGS)
 # Command expand
 noinst_LIBRARIES += src/libsinglebin_expand.a
-src_libsinglebin_expand_a_SOURCES = src/expand.c
+src_libsinglebin_expand_a_SOURCES =   src/expand.c src/expand-common.c
 src_libsinglebin_expand_a_CFLAGS = "-Dmain=single_binary_main_expand (int, char **);  int single_binary_main_expand"  -Dusage=_usage_expand $(src_coreutils_CFLAGS)
 # Command expr
 noinst_LIBRARIES += src/libsinglebin_expr.a
@@ -314,7 +315,6 @@ src_libsinglebin_readlink_a_CFLAGS = "-Dmain=single_binary_main_readlink (int, c
 # Command realpath
 noinst_LIBRARIES += src/libsinglebin_realpath.a
 src_libsinglebin_realpath_a_SOURCES =   src/realpath.c src/relpath.c src/relpath.h
-src_libsinglebin_realpath_a_ldadd =   $(LIBICONV)
 src_libsinglebin_realpath_a_CFLAGS = "-Dmain=single_binary_main_realpath (int, char **);  int single_binary_main_realpath"  -Dusage=_usage_realpath $(src_coreutils_CFLAGS)
 # Command rm
 noinst_LIBRARIES += src/libsinglebin_rm.a
@@ -386,7 +386,6 @@ src_libsinglebin_sort_a_CFLAGS = "-Dmain=single_binary_main_sort (int, char **);
 # Command split
 noinst_LIBRARIES += src/libsinglebin_split.a
 src_libsinglebin_split_a_SOURCES = src/split.c
-src_libsinglebin_split_a_ldadd =   $(LIBICONV)
 src_libsinglebin_split_a_CFLAGS = "-Dmain=single_binary_main_split (int, char **);  int single_binary_main_split"  -Dusage=_usage_split $(src_coreutils_CFLAGS)
 # Command stat
 noinst_LIBRARIES += src/libsinglebin_stat.a
@@ -423,7 +422,7 @@ src_libsinglebin_test_a_CFLAGS = "-Dmain=single_binary_main_test (int, char **);
 # Command timeout
 noinst_LIBRARIES += src/libsinglebin_timeout.a
 src_libsinglebin_timeout_a_SOURCES =   src/timeout.c src/operand2sig.c
-src_libsinglebin_timeout_a_ldadd =   $(LIB_TIMER_TIME)  $(LIBICONV)
+src_libsinglebin_timeout_a_ldadd =   $(LIB_TIMER_TIME)
 src_libsinglebin_timeout_a_CFLAGS = "-Dmain=single_binary_main_timeout (int, char **);  int single_binary_main_timeout"  -Dusage=_usage_timeout $(src_coreutils_CFLAGS)
 # Command touch
 noinst_LIBRARIES += src/libsinglebin_touch.a
@@ -441,7 +440,6 @@ src_libsinglebin_true_a_CFLAGS = "-Dmain=single_binary_main_true (int, char **);
 # Command truncate
 noinst_LIBRARIES += src/libsinglebin_truncate.a
 src_libsinglebin_truncate_a_SOURCES = src/truncate.c
-src_libsinglebin_truncate_a_ldadd =   $(LIBICONV)
 src_libsinglebin_truncate_a_CFLAGS = "-Dmain=single_binary_main_truncate (int, char **);  int single_binary_main_truncate"  -Dusage=_usage_truncate $(src_coreutils_CFLAGS)
 # Command tsort
 noinst_LIBRARIES += src/libsinglebin_tsort.a
@@ -458,7 +456,7 @@ src_libsinglebin_uname_a_ldadd =   $(GETHOSTNAME_LIB)
 src_libsinglebin_uname_a_CFLAGS = "-Dmain=single_binary_main_uname (int, char **);  int single_binary_main_uname"  -Dusage=_usage_uname $(src_coreutils_CFLAGS)
 # Command unexpand
 noinst_LIBRARIES += src/libsinglebin_unexpand.a
-src_libsinglebin_unexpand_a_SOURCES = src/unexpand.c
+src_libsinglebin_unexpand_a_SOURCES =   src/unexpand.c src/expand-common.c
 src_libsinglebin_unexpand_a_CFLAGS = "-Dmain=single_binary_main_unexpand (int, char **);  int single_binary_main_unexpand"  -Dusage=_usage_unexpand $(src_coreutils_CFLAGS)
 # Command uniq
 noinst_LIBRARIES += src/libsinglebin_uniq.a

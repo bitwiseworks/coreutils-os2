@@ -23,6 +23,7 @@
 #include <selinux/selinux.h>
 
 #include "system.h"
+#include "die.h"
 #include "error.h"
 #include "mkdir-p.h"
 #include "modechange.h"
@@ -122,7 +123,7 @@ make_ancestor (char const *dir, char const *component, void *options)
 {
   struct mkdir_options const *o = options;
 
-  if (o->set_security_context && defaultcon (dir, S_IFDIR) < 0
+  if (o->set_security_context && defaultcon (component, S_IFDIR) < 0
       && ! ignorable_ctx_err (errno))
     error (0, errno, _("failed to set default creation context for %s"),
            quoteaf (dir));
@@ -264,9 +265,9 @@ main (int argc, char **argv)
         ret = setfscreatecon (se_const (scontext));
 
       if (ret < 0)
-        error (EXIT_FAILURE, errno,
-               _("failed to set default file creation context to %s"),
-               quote (scontext));
+        die (EXIT_FAILURE, errno,
+             _("failed to set default file creation context to %s"),
+             quote (scontext));
     }
 
 
@@ -280,8 +281,8 @@ main (int argc, char **argv)
         {
           struct mode_change *change = mode_compile (specified_mode);
           if (!change)
-            error (EXIT_FAILURE, 0, _("invalid mode %s"),
-                   quote (specified_mode));
+            die (EXIT_FAILURE, 0, _("invalid mode %s"),
+                 quote (specified_mode));
           options.mode = mode_adjust (S_IRWXUGO, true, umask_value, change,
                                       &options.mode_bits);
           free (change);

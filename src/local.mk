@@ -43,7 +43,9 @@ noinst_HEADERS =		\
   src/chown-core.h		\
   src/copy.h			\
   src/cp-hash.h			\
+  src/die.h			\
   src/dircolors.h		\
+  src/expand-common.h		\
   src/fiemap.h			\
   src/find-mount-point.h	\
   src/fs.h			\
@@ -286,19 +288,9 @@ src_ls_LDADD += $(LIB_HAS_ACL)
 copy_ldadd += $(LIB_XATTR)
 
 # for print_unicode_char, proper_name_utf8
-src_cat_LDADD += $(LIBICONV)
-src_cp_LDADD += $(LIBICONV)
-src_df_LDADD += $(LIBICONV)
-src_du_LDADD += $(LIBICONV)
 src_factor_LDADD += $(LIBICONV)
-src_getlimits_LDADD += $(LIBICONV)
 src_printf_LDADD += $(LIBICONV)
 src_ptx_LDADD += $(LIBICONV)
-src_realpath_LDADD += $(LIBICONV)
-src_split_LDADD += $(LIBICONV)
-src_stdbuf_LDADD += $(LIBICONV)
-src_timeout_LDADD += $(LIBICONV)
-src_truncate_LDADD += $(LIBICONV)
 
 # for libcrypto hash routines
 src_md5sum_LDADD += $(LIB_CRYPTO)
@@ -401,12 +393,21 @@ src_sha384sum_SOURCES = src/md5sum.c
 src_sha384sum_CPPFLAGS = -DHASH_ALGO_SHA384=1 $(AM_CPPFLAGS)
 src_sha512sum_SOURCES = src/md5sum.c
 src_sha512sum_CPPFLAGS = -DHASH_ALGO_SHA512=1 $(AM_CPPFLAGS)
+src_b2sum_CPPFLAGS = -include config.h -DHASH_ALGO_BLAKE2=1 \
+		     $(AM_CPPFLAGS)
+src_b2sum_SOURCES = src/md5sum.c \
+		    src/blake2/blake2.h src/blake2/blake2-impl.h \
+		    src/blake2/blake2b-ref.c \
+		    src/blake2/b2sum.c src/blake2/b2sum.h
 
 src_base64_CPPFLAGS = -DBASE_TYPE=64 $(AM_CPPFLAGS)
 src_base32_SOURCES = src/base64.c
 src_base32_CPPFLAGS = -DBASE_TYPE=32 $(AM_CPPFLAGS)
 
 src_ginstall_CPPFLAGS = -DENABLE_MATCHPATHCON=1 $(AM_CPPFLAGS)
+
+src_expand_SOURCES = src/expand.c src/expand-common.c
+src_unexpand_SOURCES = src/unexpand.c src/expand-common.c
 
 # Ensure we don't link against libcoreutils.a as that lib is
 # not compiled with -fPIC which causes issues on 64 bit at least
@@ -648,4 +649,4 @@ cu_install_program = @INSTALL_PROGRAM@
 else
 cu_install_program = src/ginstall
 endif
-INSTALL_PROGRAM = $(cu_install_program)
+INSTALL = $(cu_install_program) -c

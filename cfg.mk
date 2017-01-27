@@ -21,6 +21,9 @@ manual_title = Core GNU utilities
 # it can take a while for the faster mirror links to become usable.
 url_dir_list = http://ftp.gnu.org/gnu/$(PACKAGE)
 
+# Exclude bundled external projects from syntax checks
+VC_LIST_ALWAYS_EXCLUDE_REGEX = src/blake2/.*$$
+
 # Tests not to run as part of "make distcheck".
 local-checks-to-skip = \
   sc_proper_name_utf8_requires_ICONV
@@ -45,7 +48,7 @@ export VERBOSE = yes
 # 4914152 9e
 export XZ_OPT = -8e
 
-old_NEWS_hash = f17fb1ab51acb854afd2f45b8940a029
+old_NEWS_hash = 4cdc662ed636425161a383b9aa85b2eb
 
 # Add an exemption for sc_makefile_at_at_check.
 _makefile_at_at_check_exceptions = ' && !/^cu_install_prog/ && !/dynamic-dep/'
@@ -226,6 +229,16 @@ sc_error_shell_always_quotes:
 	       exit 1; }  \
 	  || :
 
+# Usage of error() with an exit constant, should instead use die(),
+# as that avoids warnings and may generate better code, due to being apparent
+# to the compiler that it doesn't return.
+sc_die_EXIT_FAILURE:
+	@cd $(srcdir)/src && GIT_PAGER= git grep -E \
+	    'error \(.*_(FAILURE|INVALID)' \
+	  && { echo '$(ME): '"Use die() instead of error" 1>&2; \
+	       exit 1; }  \
+	  || :
+
 # Avoid unstyled quoting to internal slots and thus destined for diagnostics
 # as that can leak unescaped control characters to the output, when using
 # the default "literal" quoting style.
@@ -251,7 +264,7 @@ au_dotdot = authors-dotdot
 au_actual = authors-actual
 sc_check-AUTHORS: $(all_programs)
 	@locale=en_US.UTF-8;				\
-	LC_ALL=$$locale ./src/cat --version		\
+	LC_ALL=$$locale ./src/factor --version		\
 	    | grep ' Torbjorn '	> /dev/null		\
 	  && { echo "$@: skipping this check"; exit 0; }; \
 	rm -f $(au_actual) $(au_dotdot);		\
@@ -424,14 +437,14 @@ sc_prohibit_stat_macro_address:
 	  $(_sc_search_regexp)
 
 # Ensure that date's --help output stays in sync with the info
-# documentation for GNU strftime.  The only exception is %N,
+# documentation for GNU strftime.  The only exception is %N and %q,
 # which date accepts but GNU strftime does not.
 extract_char = sed 's/^[^%][^%]*%\(.\).*/\1/'
 sc_strftime_check:
 	@if test -f $(srcdir)/src/date.c; then				\
 	  grep '^  %.  ' $(srcdir)/src/date.c | sort			\
 	    | $(extract_char) > $@-src;					\
-	  { echo N;							\
+	  { echo N; echo q;						\
 	    info libc date calendar format 2>/dev/null			\
 	      | grep "^ *['\`]%.'$$"| $(extract_char); }| sort >$@-info;\
 	  if test $$(stat --format %s $@-info) != 2; then		\
@@ -492,8 +505,16 @@ sc_prohibit_fail_0:
 # independently check its contents and thus detect any crash messages.
 sc_prohibit_and_fail_1:
 	@prohibit='&& fail=1'						\
-	exclude='(stat|kill|test |EGREP|grep|compare|2> *[^/])'		\
+	exclude='(returns_|stat|kill|test |EGREP|grep|compare|2> *[^/])' \
 	halt='&& fail=1 detected. Please use: returns_ 1 ... || fail=1'	\
+	in_vc_files='^tests/'						\
+	  $(_sc_search_regexp)
+
+# Ensure that env vars are not passed through returns_ as
+# that was seen to fail on FreeBSD /bin/sh at least
+sc_prohibit_env_returns:
+	@prohibit='=[^ ]* returns_ '					\
+	halt='Passing env vars to returns_ is non portable'		\
 	in_vc_files='^tests/'						\
 	  $(_sc_search_regexp)
 
@@ -566,6 +587,14 @@ sc_prohibit_test_backticks:
 sc_prohibit_test_empty:
 	@prohibit='test -s.*&&' in_vc_files='^tests/'			\
 	halt='use `compare /dev/null ...`, not `test -s ...` in tests/'	\
+	  $(_sc_search_regexp)
+
+# Ensure that expr doesn't work directly on various unsigned int types,
+# as that's not generally supported without GMP.
+sc_prohibit_expr_unsigned:
+	@prohibit='expr .*(UINT|ULONG|[^S]SIZE|[UGP]ID|UINTMAX)'	\
+	halt='avoid passing unsigned limits to `expr` (without GMP)'	\
+	in_vc_files='^tests/'						\
 	  $(_sc_search_regexp)
 
 # Programs like sort, ls, expr use PROG_FAILURE in place of EXIT_FAILURE.
@@ -714,15 +743,22 @@ sc_THANKS_in_duplicates:
 	    && { echo '$(ME): remove the above names from THANKS.in'	\
 		  1>&2; exit 1; } || :
 
-# Ensure the contributor list stays sorted.  Use our sort as other
-# implementations may result in a different order.
-sc_THANKS_in_sorted:  src/sort
-	@sed '/^$$/,/^$$/!d;/^$$/d' $(srcdir)/THANKS.in > $@.1;		\
-	LC_ALL=en_US.UTF-8 src/sort -f -k1,1 $@.1 > $@.2
-	@diff -u $@.1 $@.2; diff=$$?;					\
-	rm -f $@.1 $@.2;						\
-	test "$$diff" = 0						\
-	  || { echo '$(ME): THANKS.in is unsorted' 1>&2; exit 1; }
+# Ensure the contributor list stays sorted.  However, if the system's
+# en_US.UTF-8 locale data is erroneous, give a diagnostic and skip
+# this test.  This affects OS X, up to at least 10.11.6.
+# Use our sort as other implementations may result in a different order.
+sc_THANKS_in_sorted:
+	@printf 'a\n.b\n'|LC_ALL=en_US.UTF-8 src/sort -c 2> /dev/null	\
+	  && {								\
+	    sed '/^$$/,/^$$/!d;/^$$/d' $(srcdir)/THANKS.in > $@.1 &&	\
+	    LC_ALL=en_US.UTF-8 src/sort -f -k1,1 $@.1 > $@.2 &&		\
+	    diff -u $@.1 $@.2; diff=$$?;				\
+	    rm -f $@.1 $@.2;						\
+	    test "$$diff" = 0						\
+	      || { echo '$(ME): THANKS.in is unsorted' 1>&2; exit 1; };	\
+	    }								\
+	  || { echo '$(ME): this system has erroneous locale data;'	\
+		    'skipping $@' 1>&2; }
 
 # Look for developer diagnostics that are marked for translation.
 # This won't find any for which devmsg's format string is on a separate line.
@@ -742,7 +778,7 @@ sc_fs-magic-compare:
 # Ensure gnulib generated files are ignored
 # TODO: Perhaps augment gnulib-tool to do this in lib/.gitignore?
 sc_gitignore_missing:
-	@{ sed -n '/^\/lib\/.*\.h$$/{p;p}' .gitignore;			\
+	@{ sed -n '/^\/lib\/.*\.h$$/{p;p}' $(srcdir)/.gitignore;	\
 	    find lib -name '*.in*' ! -name '*~' ! -name 'sys_*' |	\
 	      sed 's|^|/|; s|_\(.*in\.h\)|/\1|; s/\.in//'; } |		\
 	      sort | uniq -u | grep . && { echo '$(ME): Add above'	\
@@ -750,7 +786,8 @@ sc_gitignore_missing:
 
 # Flag redundant entries in .gitignore
 sc_gitignore_redundant:
-	@{ grep ^/lib .gitignore; sed 's|^|/lib|' lib/.gitignore; } |	\
+	@{ grep ^/lib $(srcdir)/.gitignore;				\
+	   sed 's|^|/lib|' $(srcdir)/lib/.gitignore; } |		\
 	    sort | uniq -d | grep . && { echo '$(ME): Remove above'	\
 	      'entries from .gitignore' >&2; exit 1; } || :
 
@@ -779,7 +816,7 @@ exclude_file_name_regexp--sc_bindtextdomain = \
 exclude_file_name_regexp--sc_trailing_blank = \
   ^(tests/pr/|gl/.*\.diff$$|man/help2man)
 exclude_file_name_regexp--sc_system_h_headers = \
-  ^src/((system|copy)\.h|make-prime-list\.c)$$
+  ^src/((die|system|copy)\.h|make-prime-list\.c)$$
 
 _src = (false|lbracket|ls-(dir|ls|vdir)|tac-pipe|uname-(arch|uname))
 exclude_file_name_regexp--sc_require_config_h_first = \
@@ -807,7 +844,7 @@ _ll = ^src/longlong\.h$$
 exclude_file_name_regexp--sc_useless_cpp_parens = $(_ll)
 exclude_file_name_regexp--sc_space_before_open_paren = $(_ll)
 
-tbi_1 = ^tests/pr/|(^gl/lib/reg.*\.c\.diff|\.mk|^man/help2man)$$
+tbi_1 = ^tests/pr/|(\.mk|^man/help2man)$$
 tbi_2 = ^scripts/git-hooks/(pre-commit|pre-applypatch|applypatch-msg)$$
 tbi_3 = (GNU)?[Mm]akefile(\.am)?$$|$(_ll)
 exclude_file_name_regexp--sc_prohibit_tab_based_indentation = \

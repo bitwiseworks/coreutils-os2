@@ -37,6 +37,12 @@
 # include <sys/param.h>
 #endif
 
+#if MAJOR_IN_MKDEV
+# include <sys/mkdev.h>
+#elif MAJOR_IN_SYSMACROS
+# include <sys/sysmacros.h>
+#endif
+
 #if defined MOUNTED_GETFSSTAT   /* OSF_1 and Darwin1.3.x */
 # if HAVE_SYS_UCRED_H
 #  include <grp.h> /* needed on OSF V4.0 for definition of NGROUPS,
@@ -217,13 +223,15 @@ me_remote (char const *fs_name, char const *fs_type _GL_UNUSED)
 
 #ifndef ME_REMOTE
 /* A file system is "remote" if its Fs_name contains a ':'
-   or if (it is of type (smbfs or cifs) and its Fs_name starts with '//').  */
+   or if (it is of type (smbfs or cifs) and its Fs_name starts with '//')
+   or Fs_name is equal to "-hosts" (used by autofs to mount remote fs).  */
 # define ME_REMOTE(Fs_name, Fs_type)            \
     (strchr (Fs_name, ':') != NULL              \
      || ((Fs_name)[0] == '/'                    \
          && (Fs_name)[1] == '/'                 \
          && (strcmp (Fs_type, "smbfs") == 0     \
-             || strcmp (Fs_type, "cifs") == 0)))
+             || strcmp (Fs_type, "cifs") == 0)) \
+     || (strcmp("-hosts", Fs_name) == 0))
 #endif
 
 #if MOUNTED_GETMNTINFO
@@ -1068,6 +1076,8 @@ read_file_system_list (bool need_fs_type)
         struct dirent entry;
         struct dirent *result;
 
+        /* FIXME: readdir_r is planned to be withdrawn from POSIX and
+           marked obsolescent in glibc.  Use readdir instead.  */
         if (readdir_r (dirp, &entry, &result) || result == NULL)
           break;
 

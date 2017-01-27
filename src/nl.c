@@ -27,6 +27,7 @@
 
 #include <regex.h>
 
+#include "die.h"
 #include "error.h"
 #include "fadvise.h"
 #include "linebuffer.h"
@@ -185,7 +186,7 @@ Write each FILE to standard output, with line numbers added.\n\
 
       fputs (_("\
   -b, --body-numbering=STYLE      use STYLE for numbering body lines\n\
-  -d, --section-delimiter=CC      use CC for separating logical pages\n\
+  -d, --section-delimiter=CC      use CC for logical page delimiters\n\
   -f, --footer-numbering=STYLE    use STYLE for numbering footer lines\n\
 "), stdout);
       fputs (_("\
@@ -193,20 +194,20 @@ Write each FILE to standard output, with line numbers added.\n\
   -i, --line-increment=NUMBER     line number increment at each line\n\
   -l, --join-blank-lines=NUMBER   group of NUMBER empty lines counted as one\n\
   -n, --number-format=FORMAT      insert line numbers according to FORMAT\n\
-  -p, --no-renumber               do not reset line numbers at logical pages\n\
+  -p, --no-renumber               do not reset line numbers for each section\n\
   -s, --number-separator=STRING   add STRING after (possible) line number\n\
 "), stdout);
       fputs (_("\
-  -v, --starting-line-number=NUMBER  first line number on each logical page\n\
+  -v, --starting-line-number=NUMBER  first line number for each section\n\
   -w, --number-width=NUMBER       use NUMBER columns for line numbers\n\
 "), stdout);
       fputs (HELP_OPTION_DESCRIPTION, stdout);
       fputs (VERSION_OPTION_DESCRIPTION, stdout);
       fputs (_("\
 \n\
-By default, selects -v1 -i1 -l1 -sTAB -w6 -nrn -hn -bt -fn.  CC are\n\
-two delimiter characters for separating logical pages, a missing\n\
-second character implies :.  Type \\\\ for \\.  STYLE is one of:\n\
+By default, selects -v1 -i1 -l1 -sTAB -w6 -nrn -hn -bt -fn.\n\
+CC are two delimiter characters used to construct logical page delimiters,\n\
+a missing second character implies :.  Type \\\\ for \\.  STYLE is one of:\n\
 "), stdout);
       fputs (_("\
 \n\
@@ -255,7 +256,7 @@ build_type_arg (char const **typep,
         RE_SYNTAX_POSIX_BASIC & ~RE_CONTEXT_INVALID_DUP & ~RE_NO_EMPTY_RANGES;
       errmsg = re_compile_pattern (optarg, strlen (optarg), regexp);
       if (errmsg)
-        error (EXIT_FAILURE, 0, "%s", (errmsg));
+        die (EXIT_FAILURE, 0, "%s", (errmsg));
       break;
     default:
       rval = false;
@@ -275,7 +276,7 @@ print_lineno (void)
 
   next_line_no = line_no + page_incr;
   if (next_line_no < line_no)
-    error (EXIT_FAILURE, 0, _("line number overflow"));
+    die (EXIT_FAILURE, 0, _("line number overflow"));
   line_no = next_line_no;
 }
 
@@ -298,6 +299,8 @@ proc_body (void)
 {
   current_type = body_type;
   current_regex = &body_regex;
+  if (reset_numbers)
+    line_no = starting_line_number;
   putchar ('\n');
 }
 
@@ -308,6 +311,8 @@ proc_footer (void)
 {
   current_type = footer_type;
   current_regex = &footer_regex;
+  if (reset_numbers)
+    line_no = starting_line_number;
   putchar ('\n');
 }
 
@@ -348,7 +353,7 @@ proc_text (void)
                          0, line_buf.length - 1, NULL))
         {
         case -2:
-          error (EXIT_FAILURE, errno, _("error in regular expression search"));
+          die (EXIT_FAILURE, errno, _("error in regular expression search"));
 
         case -1:
           fputs (print_no_line_fmt, stdout);
@@ -584,7 +589,7 @@ main (int argc, char **argv)
       ok &= nl_file (argv[optind]);
 
   if (have_read_stdin && fclose (stdin) == EOF)
-    error (EXIT_FAILURE, errno, "-");
+    die (EXIT_FAILURE, errno, "-");
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

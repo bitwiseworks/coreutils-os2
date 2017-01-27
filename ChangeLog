@@ -1,4 +1,1470 @@
+2016-11-30  Pádraig Brady  <P@draigBrady.com>
+
+	version 8.26
+	* NEWS: Record release date.
+
+	tests: fix false failure with spaces in $PWD
+	* tests/misc/ptx-overrun.sh: Quote appropriately to avoid this
+	recently added issue, noticed by `make taint-distcheck`.
+
+	maint: avoid "make distcheck" failure without excess .deps directories
+	* Makefile.am (my-distcheck): Add the -r option to xargs so that
+	rmdir doesn't return an error when there are no extraneous .deps dirs.
+
+2016-11-29  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix ERRORs and false FAILs on some platforms
+	* tests/misc/ls-time.sh: Skip the test rather than ERROR
+	when `touch -m -d ...` fails (Hurd).
+	* tests/tail-2/follow-stdin.sh: Avoid false FAILs by ignoring
+	the variances in sterror output.
+	* tests/rm/rm-readdir-fail.sh: Likewise.  Also avoid ERRORs
+	on systems that don't define _D_EXACT_NAMELEN.
+
+2016-11-28  Pádraig Brady  <P@draigBrady.com>
+
+	head: fix processing of non-seekable input as seekable
+	* src/head.c (elide_tail_bytes_file): Ensure we don't use
+	st_size unless we've previously used seek() to determine
+	the CURRENT_POS in the seekable file.
+	This was seen to cause issue on FreeBSD 11 when the pipe
+	buffer was filled with `yes | head --lines=-0`, in which
+	case st_size was 64KiB while ST_BLKSIZE() was 4KiB.
+	Reported by Assaf Gordon.
+
+2016-11-28  Kamil Dudka  <kdudka@redhat.com>
+
+	install,mkdir: fix handling of -DZ and -pZ, respectively
+	... in the case where two or more directories nested in each other are
+	created and each of them defaults to a different SELinux context.
+
+	* src/install.c (make_ancestor): When calling defaultcon(), give it the
+	same path that is given to mkdir().  The other path is not always valid
+	wrt. current working directory.
+	* src/mkdir.c (make_ancestor): Likewise.
+	* NEWS: Mention the bug fix.
+
+	Reported at https://bugzilla.redhat.com/1398913
+
+2016-11-28  Pádraig Brady  <P@draigBrady.com>
+
+	tac: fix mem corruption when failing to read non seekable inputs
+	This was detected with ASAN, but can also be seen without ASAN with:
+	  $ tac - - <&-
+	  tac: standard input: read error: Bad file descriptor
+	  *** Error in `tac': malloc(): memory corruption: 0x...
+
+	* src/tac.c (copy_to_temp): Don't close our output stream on
+	(possibly transient) output error, or on input error.
+	(temp_stream): clearerr() on the stream about to be reused,
+	to ensure future stream use is not impacted by transient errors.
+	* tests/misc/tac-2-nonseekable.sh: Add a test case.
+	* NEWS: Mention the bug fix.
+	Fixes http://bugs.gnu.org/25041
+
+2016-11-27  Pádraig Brady  <P@draigBrady.com>
+
+	tail: fix uninitialized memory read when failing to read file
+	Reproduced under UBSAN with `tail -f <&-` giving:
+	  tail.c:2220:18: runtime error: load of value 190,
+	  which is not a valid value for type ‘_Bool'
+
+	* src/tail.c (tail_file): Ensure f->ignore is initialized
+	in all cases where we can't tail the specified file.
+	* tests/tail-2/follow-stdin.sh: Add a test case which
+	checks stderr has no UBSAN warnings.
+	Fixes http://bugs.gnu.org/25041
+
+2016-11-27  Pádraig Brady  <P@draigBrady.com>
+
+	doc: add NEWS entries for recent changes
+	* NEWS: Mention in improvements about the workaround for
+	the glibc issue with closed stdin, and the new supported file systems.
+	* tests/misc/b2sum.sh: Spelling fix.
+
+2016-11-27  Pádraig Brady  <P@draigBrady.com>
+
+	stat,tail: sync with latest Linux file systems
+	Update with the results from:
+
+	  kgit='https://git.kernel.org/cgit/linux/kernel/git'
+	  wget -q $kgit/torvalds/linux.git/plain/include/uapi/linux/magic.h \
+	    -O src/fs-latest-magic.h
+	  make src/fs-magic-compare
+
+	* src/stat.c (human_fstype): Add entries for:
+	BALLOON_KVM, CGROUP2, DAXFS, ZSMALLOC.
+
+2016-11-27  Pádraig Brady  <P@draigBrady.com>
+
+	build: fix potential factor build failure on arm and risc
+	* src/longlong.h: Sync from gmp repo incorporating:
+	Protect umul_ppmm with do ... while (0)
+	Replace obsolete ARC asm 'J' constraints with 'Cal'
+	Provide umul_ppmm for riscv64
+
+2016-11-27  Pádraig Brady  <P@draigBrady.com>
+
+	shred,sort: ensure faster unaligned access to rand module
+	glibc has changed the public define
+	from _STRING_ARCH_unaligned to _STRING_INLINE_unaligned as per
+	https://sourceware.org/bugzilla/show_bug.cgi?id=19462
+
+	* gl/lib/rand-isaac.c: Cater for both defines.
+	* gl/lib/randread.c: Likewise.
+	* src/system.h: Update commented out code.
+
+2016-11-26  Paul Eggert  <eggert@cs.ucla.edu>
+
+	shuf: test input-closed bug
+	Problem reported by Alex Ryan (Bug#25029).
+	* tests/misc/shuf.sh: Test for shuffling with stdin closed.
+
+	build: update gnulib submodule to latest
+
+	numfmt: pacify Sun C 5.14
+	* src/numfmt.c (main): Don't implicitly coerce pointer in bool
+	initializer.  Although it's portable C99 code, it's confusing.
+
+2016-11-25  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix false failure on new ls test
+	* tests/ls/quote-align.sh: Remove "total" line
+	which can vary per file system depending on allocation.
+	Reported by Assaf Gordon on OpenSolaris (5.11/5.10).
+
+2016-11-25  Pádraig Brady  <P@draigBrady.com>
+
+	pr: fix read from invalid memory with tabs in separator
+	This was detected with:
+	  echo a > a; pr "-S$(printf "\t\t\t")" a -m a > /dev/null
+	Resulting in ASAN triggering:
+	  ====================================================
+	  ERROR: AddressSanitizer: global-buffer-overflow
+	  READ of size 1 at 0x00000041b622 thread T0
+	    #0 0x40506a in print_sep_string ../src/pr.c:2241
+	    #1 0x407ec4 in read_line ../src/pr.c:2493
+	    #2 0x40985c in print_page ../src/pr.c:1802
+	    #3 0x40985c in print_files ../src/pr.c:1618
+	    #4 0x4036e0 in main ../src/pr.c:1136
+
+	* src/pr.c (init_parameters): Ensure we only override the
+	specified separator when it's a single tab, thus matching
+	the calculated separator length.
+	* tests/pr/pr-tests.pl: Add a test case.
+	* NEWS: Mention the fix.
+
+2016-11-24  Pádraig Brady  <P@draigBrady.com>
+
+	ptx: fix an invalid heap reference with short --width
+	* src/ptx.c (fix_output_parameters): Ensure line_width doesn't
+	go negative, which can happen when the --width is less
+	than the --gap-size.
+	* tests/misc/ptx-overrun.sh: Add a test case that triggers
+	with ASAN.  (Note the longer filename is needed to trigger).
+	Fixes http://bugs.gnu.org/25011
+
+2016-11-24  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	doc: clarify that readlink's --quiet option is on by default
+	* src/readlink.c (usage): Mark the --quiet/--silent option as active
+	by default.
+	* doc/coreutils.texi (readlink invocation): Likewise.
+
+2016-11-24  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix false failure with ASAN in rm-readdir-fail
+	* tests/rm/rm-readdir-fail.sh: ASAN correctly indicated
+	that fts was writing to freed memory.  This was because
+	we reused a single dirent in our readdir() test wrapper.
+	Since fts was deallocating those dirents, we now get
+	a new dirent for each call to our readdir wrapper.
+
+2016-11-24  Pádraig Brady  <P@draigBrady.com>
+
+	split: fix memory corruption during chunk extraction
+	ASAN reported this error for: split -n2/3 /dev/null
+	  ERROR: AddressSanitizer: negative-size-param: (size=-1)
+	  #0 0x7f0d4c36951d in __asan_memmove (/lib64/libasan.so.2+0x8d51d)
+	  #1 0x404e06 in memmove /usr/include/bits/string3.h:59
+	  #2 0x404e06 in bytes_chunk_extract src/split.c:988
+	  #3 0x404e06 in main src/split.c:1626
+
+	Specifically there would be invalid memory access
+	and subsequent processing if the chunk to be extracted
+	was beyond the initial amount read from file (which is
+	currently capped at 128KiB).  This issue is not in a
+	released version, only being introduced in commit v8.25-4-g62e7af0
+
+	* src/split.c (bytes_chunk_extract): The initial_read != SIZE_MAX
+	should have been combined with && rather than ||, but also this
+	condition is always true in this function so remove entirely.
+	* tests/split/b-chunk.sh: Add a test case.
+
+	Fixes http://bugs.gnu.org/25003
+
+2016-11-24  Pádraig Brady  <P@draigBrady.com>
+
+	tail: fix checking of remoteness when not using inotify
+	In recent commit v8.25-93-g7fc7206 we used the f->remote flag
+	which wasn't set in all cases.  This was detected with
+	ASAN giving this error when reading f->remote;
+	  runtime error: load of value 190,
+	  which is not a valid value for type '_Bool'
+
+	* src/tail.c (fremote): Query the system even without inotify.
+	(recheck): Always set f->fremote for valid files.
+
+2016-11-23  Jim Meyering  <meyering@fb.com>
+
+	build: avoid racy failure of "make -jN install"
+	Installing with -j2 or greater could result in a failure like
+	  /bin/sh: line 29: /P/bin/install: Permission denied
+	when /P/bin/install specifies your PATH-selected install program.
+	This would arise because we're using "install" to install all
+	man/*.1 files, and that command would run concurrently with the one
+	that installs "/P/bin/install" itself.  We would run this command:
+	"src/ginstall src/ginstall /P/bin/install", and it would result
+	in intervals during which the destination file does not exist,
+	is empty or incomplete and not executable.  We addressed this
+	problem long ago for installation of actual binaries by telling the
+	installation rules to use our just-built bin/ginstall (only when not
+	cross-compiling) rather than the PATH-resolved "install" program.
+	This change is to do the same for those .1 files.
+	* src/local.mk (INSTALL): Override automake's default of something
+	like "INSTALL = /P/bin/install -c".
+	(INSTALL_PROGRAM): Now that we set INSTALL, there is no longer any
+	need to set this derived variable.  Its default definition,
+	"INSTALL_PROGRAM = ${INSTALL}" does what we require.
+	Improved by Eric Blake.
+
+2016-11-23  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	maint: fix 'syntax-check' targets for VPATH builds
+	* cfg.mk (sc_gitignore_missing): Add $(srcdir) to .gitignore filename.
+	(sc_gitignore_redundant): Likewise.
+
+	maint: add build-aux/ar-lib to .gitignore
+	* .gitignore: Add entry for the above file which is created
+	by  './bootstrap'.
+
+2016-11-23  Paul Eggert  <eggert@cs.ucla.edu>
+
+	pr: fix integer overflow in buffer size calcs
+	Problem reported by Marcel Böhme (Bug#24996).
+	* configure.ac (WERROR_CFLAGS): Avoid -Wtype-limits.
+	* src/pr.c (col_sep_string): Now a const pointer.  All uses changed.
+	(integer_overflow): New function.
+	(separator_string, main, init_parameters, init_store_cols):
+	Check for integer overflow.
+	(align_column, read_line, print_stored): Avoid integer overflow.
+
+2016-11-22  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	comm: add --total option
+	* src/comm.c (total_option): Add bool variable for the new option.
+	(TOTAL_OPTION): Add enum value.
+	(long_options): Add array element for the new option.
+	(usage): Document the new option here.
+	(compare_files): Count the lines in total[3], and output the summary at
+	the end.
+	(main): Accept the new option.
+	* doc/coreutils.texi (comm invocation): Document it.
+	* tests/misc/comm.pl: Test it.  While at it, improve the test data
+	to have 1 unique line in the first file, 2 unique lines in the second
+	file, and 3 common lines.
+	* NEWS (New Features): Mention the new option.
+
+	Fixes http://bugs.gnu.org/24929
+
+2016-11-22  Pádraig Brady  <P@draigBrady.com>
+
+	all: update gnulib submodule to latest
+	Also sync these copies with gnulib:
+	* bootstrap: Sync missed part of AIX support.
+	* tests/init.sh: Support compare_ on AIX.
+
+	tests: fix false failure with FreeBSD 11 multibyte quoting
+	* tests/misc/printf-quote.sh: FreeBSD 11 was seen to treat
+	\u0378 as a printable character.  Therefore change to
+	using the \u0081 C1 control character.  We use the UTF-8
+	representation because our printf implementation explicitly
+	disallows \u0081 as input.
+	Reported by Assaf Gordon
+
+2016-11-22  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix false fails due to passing env vars to returns_
+	On BSD /bin/sh it was seen that unexported env vars passed to
+	returns_() would not be propagated to the wrapped command.
+
+	* cfg.mk (sc_prohibit_env_returns): Add a syntax check to disallow.
+	* tests/misc/csplit-io-err.sh: Rearrange to export vars in a subshell.
+	* tests/rm/rm-readdir-fail.sh: Likewise.
+	* tests/misc/nohup.sh: Export and unset vars around returns_.
+	* tests/misc/printenv.sh: Likewise.
+	Reported by Assaf Gordon
+
+2016-11-22  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix recent tail-2 test regressions
+	* tests/tail-2/pipe-f.sh: Avoid issue with readable
+	directories on BSD systems.
+	* tests/tail-2/retry.sh: Likewise.
+	Reported by Assaf Gordon
+
+2016-11-22  Pádraig Brady  <P@draigBrady.com>
+
+	ls: improve alignment of quoted names
+	This provides better alignment when some names are quoted,
+	which also provides better indication that quotes are not
+	part of the name.
+
+	* src/ls.c (align_variable_outer_quotes): A new variable
+	set when ls is aligning columns (not using -m, non-zero -w),
+	and has a variable quoting style (shell, shell-escape, c-maybe).
+	(quote_name_buf): Writes to buffer rather than FILE,
+	taking care to avoid data copying if possible.  Refactored from...
+	(quote_name): ...here.  This now manages the buffer passed
+	to quote_name_buf() and outputs the padding, colors and name
+	in the appropriate order, while managing the --dired offsets.
+	(get_color_indicator): A new function to return the color sequence,
+	refactored from...
+	(print_color_indicator): ...here.  This now simply outputs.
+	(print_dir): Refactor common parts to quote_name().
+	(clear_files): Reset the flag indicating at least one
+	file is quoted in the current directory.
+	(needs_quoting): A new function to indicate at the scan stage
+	whether a name needs quoting.  Called from...
+	(gobble_file): ...here, until we find the first quoted file.
+	(print_name_with_quoting): Mostly refactored to quote_name().
+	* tests/ls/quote-align.sh: A new test for various output formats.
+	* tests/local.mk: Reference the new test.
+	* NEWS: Mention the improvement.
+
+2016-11-22  Pádraig Brady  <P@draigBrady.com>
+
+	b2sum: a new checksum utility with md5sum like interface
+	Note we don't support the --algorithm option of the
+	b2sum command in the external BLAKE2 project, as that
+	was deemed too confusing for users.
+	"BLAKE2b" was chosen as the default algorithm to use,
+	which is single threaded but performs well on 64 bit.
+
+	* src/blake2: CC0 source copied from external project.
+	* cfg.mk[VC_LIST_ALWAYS_EXCLUDE_REGEX]: Exclude blake2/
+	from syntax checks, make update-copyright, etc.
+	* src/local.mk: Reference the sources for b2sum,
+	and set the compilation flags.
+	* doc/coreutils.texi (b2sum invocation): Reference the
+	md5sum invocation node, and add descriptions of -l.
+	* tests/misc/b2sum.sh: Add new test.
+	* tests/local.mk: Reference new test.
+	* AUTHORS: Add new binary.
+	* README: Likewise.
+	* build-aux/gen-lists-of-programs.sh: Likewise.
+	* man/.gitignore: Likewise.
+	* scripts/git-hooks/commit-msg: Likewise.
+	* man/b2sum.x: New man page template.
+	* man/local.mk: Reference new template.
+	* src/.gitignore: Ignore new binaries.
+	* src/blake2/.gitignore: Ignore new build atrifacts.
+	* src/md5sum.c (usage): Describe the new -l option.
+	* NEWS: Mention the new program.
+
+2016-11-22  Jim Meyering  <meyering@fb.com>
+
+	maint: avoid "make distcheck" failure due to excess .deps directories
+	* Makefile.am (my-distcheck): Remove all .deps directories before the
+	recursive diff that searches for left-behind files.  Otherwise, with
+	automake master (some time after v1.15), "make distcheck" would fail
+	due to those directories being left behind after "make distclean".
+
+2016-11-19  Pádraig Brady  <P@draigBrady.com>
+
+	cp: improve status message when omitting directories
+	* src/copy.h (cp_options): Add a new flag for install(1).
+	* src/copy.c (copy_internal): For cp, also output remediation
+	advice which also indicates why directories aren't copied by default.
+	The message is unchanged for install(1).
+	* src/cp.c (cp_option_init): Init install_mode to false.
+	* src/mv.c (cp_option_init): Likewise.
+	* src/install.c (cp_option_init): Init install_mode to true.
+	* tests/install/basic-1.sh: Add a test case.
+	* tests/cp/link-deref.sh: Adjust test case.
+	Fixes http://bugs.gnu.org/24958
+
+2016-11-16  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix non portable date in recent test
+	* tests/misc/date.pl: Years < 1900 fail on solaris at least.
+	Reported by Assaf Gordon
+
+2016-11-15  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix false failure on OS X
+	* tests/misc/sort-h-thousands-sep.sh: The sv_SE locale
+	may be available while sv_SE.utf8 is not.  Therefore
+	test and use the same locale, now definfed in a variable.
+	Reported by Jim Meyering.
+
+2016-11-15  Antonio Ospite  <ao2@ao2.it>
+
+	dircolors: highlight Motion JPEG multimedia files
+	* src/dircolors.hin: Add .mjpg and .mjpeg multimedia files.
+	This resolves http://bugs.gnu.org/24436.
+
+2016-11-14  Jim Meyering  <meyering@fb.com>
+
+	tests: use "returns_" rather than explicit comparison with "$?"
+	The previous "returns_"-using change failed to convert many
+	uses of "$?".  Convert all but two of the remaining ones.
+	* tests/ls/stat-vs-dirent.sh: Likewise.
+	* tests/misc/head-write-error.sh: Likewise.
+	* tests/misc/nice.sh: Likewise.
+	* tests/misc/nohup.sh: Likewise.
+	* tests/misc/stdbuf.sh: Likewise.
+	* tests/misc/sync.sh: Likewise.
+	* tests/tail-2/pid.sh: Likewise.
+	* tests/tail-2/wait.sh: Likewise.
+	Thanks to Bernhard Volker for spotting this.
+
+2016-11-14  Pádraig Brady  <P@draigBrady.com>
+
+	all: reduce usage of proper_name_utf8()
+	This reduces a standard coreutils install size by about 160K.
+
+	* src/cat.c: Change to proper_name() which removes about 18K text.
+	* src/cp.c: Likewise.
+	* src/df.c: Likewise.
+	* src/du.c: Likewise.
+	* src/getlimits.c: Likewise.
+	* src/realpath.c: Likewise.
+	* src/split.c: Likewise.
+	* src/stdbuf.c: Likewise.
+	* src/timeout.c: Likewise.
+	* src/truncate.c: Likewise.
+	* src/local.mk: Remove -llibiconv from the above programs.
+	* cfg.mk (sc_check-AUTHORS): Adjust to use factor(1).
+	* AUTHORS: Adjust to use ASCII to satisfy sc_check-AUTHORS.
+
+2016-11-13  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	maint: add 'returns_' to exclude list in sc_prohibit_and_fail_1
+	The previous commit v8.25-96-g22063c8 lets 'make syntax-check' fail,
+	because the above check falsely detects a case where 'returns_' is
+	already in use.
+
+	* cfg.mk (sc_prohibit_and_fail_1): Add 'returns_' to exclude list.
+
+2016-11-13  Jim Meyering  <meyering@fb.com>
+
+	tests: use "returns_" rather than explicit comparison with "$?"
+	* tests/chmod/no-x.sh: Likewise.
+	* tests/cp/no-deref-link1.sh: Likewise.
+	* tests/cp/no-deref-link2.sh: Likewise.
+	* tests/cp/no-deref-link3.sh: Likewise.
+	* tests/du/move-dir-while-traversing.sh: Likewise.
+	* tests/ls/infloop.sh: Likewise.
+	* tests/ls/stat-failed.sh: Likewise.
+	* tests/ls/time-style-diag.sh: Likewise.
+	* tests/misc/chroot-fail.sh: Likewise.
+	* tests/misc/env-null.sh: Likewise.
+	* tests/misc/env.sh: Likewise.
+	* tests/misc/nice-fail.sh: Likewise.
+	* tests/misc/printenv.sh: Likewise.
+	* tests/misc/timeout.sh: Likewise.
+	* tests/tail-2/follow-name.sh: Likewise.
+
+2016-11-10  Pádraig Brady  <P@draigBrady.com>
+
+	tail: only retry file open if --retry specifed
+	* src/tail.c (tail_file): On failure to open a file,
+	set ignore=true when --retry is not specified.
+	* tests/tail-2/assert-2.sh: Adjust to the new behavior.
+	* tests/tail-2/retry.sh: Add a test case.  Also change
+	from `tail ... && fail=1` to the more robust `returns_ 1 ...`
+	construct which detects segfaults etc.
+	* NEWS: Document the fix.
+
+2016-11-09  Pádraig Brady  <P@draigBrady.com>
+
+	tail: ensure -f --retry 'missing' handles truncation
+	* src/tail.c (tail_forever): The BLOCKING optimization is only
+	enabled for non regular files (which can't be truncated), so ensure
+	we don't enable that unless we've a valid file descriptor.
+	* tests/tail-2/retry.sh: Add a test case.
+	* NEWS: Mention the bug fix.
+
+	tail: avoid outputting repeated data with remote files
+	* src/tail.c (tail_forever): Only read up to st_size on network
+	file systems to avoid the issue with a stale attribute cache
+	returning a smaller st_size than we have already read().
+	The was seen with glusterfs at least and caused the complete
+	file to be repeatedly output due to assuming the file was
+	truncated in this case.
+	* NEWS: Mention the fix.
+
+2016-11-08  Pádraig Brady  <P@draigBrady.com>
+
+	tail: terminate when following pipes and untailable non pipes
+	* src/tail.c (ignore_pipe_or_fifo): Mark the descriptor as -1
+	for pipes so that any_live_files() detects correctly that
+	the entry is no longer live.
+	* tests/tail-2/pipe-f.sh: Add a test case.
+	* NEWS: Mention the fix.
+	Fixes http://bugs.gnu.org/24903 which was detected
+	using Symbolic Execution techniques developed in
+	the course of the SYMBIOSYS research project at
+	COMSYS, RWTH Aachen University.
+
+2016-11-07  Pádraig Brady  <P@draigBrady.com>
+
+	maint: misc tweaks to recent changes
+	* doc/coreutils.texi(cut invocation): Give a more accurate description
+	of cut field handling limitations.
+	* tests/misc/stat-fmt.sh: Fix the test header to be more general.
+	* tests/tail-2/retry.sh: Spellings.
+
+	maint: refactor printing of backup suffix --help
+	* src/system.h (emit_backup_suffix_note): A new function to
+	output the backup suffix info.  The strings are unchanged,
+	so translations are not impacted.
+	* src/cp.c (usage): Use the new function.
+	* src/ln.c (usage): Likewise.
+	* src/mv.c (usage): Likewise.
+	* src/install.c (usage): Likewise.
+
+2016-11-07  Rishabh Dave  <rishabhddave@gmail.com>
+
+	maint: simplify handling of backup --suffix in various tools
+	* src/cp.c (main): Avoid the getenv("SIMPLE_BACKUP_SUFFIX") call,
+	which is now done if needed in the gnulib backupfile module.
+	Also avoid the redundant strdup, as we don't modify this suffix.
+	* src/install.c (main): Likewise.
+	* src/ln.c (main): Likewise.
+	* src/mv.c (main): Likewise.
+	Fixes http://bugs.gnu.org/23153
+
+2016-11-07  Pádraig Brady  <P@draigBrady.com>
+
+	date: add %q to output the quarter of the year
+	* doc/coreutils.texi (date invocation): Document %q.
+	* src/date.c (usage): Likewise.
+	* tests/misc/date.pl: Add a test case.
+	* cfg.mk (sc_strftime_check): Adjust to allow %q.
+	* NEWS: Mention the new feature.
+
+2016-11-07  Pádraig Brady  <P@draigBrady.com>
+
+	all: update gnulib submodule to latest
+	Incorporating these coreutils specific changes:
+	  backupfile: initialize default suffix within the implementation
+	  strftime,strptime: support %q to represent the quarter
+
+	Also sync these copies with gnulib:
+	* bootstrap: Now supports AIX.
+	* gnulib: Update to the latest.
+	* tests/init.sh: dash(1) is now disabled.
+
+2016-11-05  Pádraig Brady  <P@draigBrady.com>
+
+	doc: clarify in texinfo that cut doesn't reorder fields
+	* doc/coreutils.texi (cut invocation): Clarify the more
+	sophisticated field processing supported by awk(1).
+	Fixes http://bugs.gnu.org/24881
+
+	stat: make --format=%N honor the QUOTING_STYLE env var
+	* doc/coreutils.texi (stat invocation): Describe the
+	QUOTING_STYLE values now supported.
+	* src/stat.c (getenv_quoting_style): A new function called
+	from main, that sets the default quoting style for quotearg.
+	(main): Call getenv_quoting_style() when %N specified.
+	* tests/misc/stat-fmt.sh: Add a test case.
+	* NEWS: Mention the improvement.
+	Fixes http://bugs.gnu.org/23422
+
+	doc: improve the --help description of ls -N
+	* src/ls.c (usage): The existing description was inaccurate
+	as -N does not directly impact whether control characters
+	are displayed or not.
+
+2016-11-04  Pádraig Brady  <P@draigBrady.com>
+
+	dd: warn about counts specified with confusing 0x prefix
+	* src/dd.c (parse_integer): Suggest to use "00x" instead of "0x",
+	which is significant for the "count", "seek", and "skip" operands.
+	* tests/dd/misc.sh: Add a test case.
+	Fixes http://bugs.gnu.org/24874
+
+2016-10-26  Pádraig Brady  <P@draigBrady.com>
+
+	md5sum,sha*sum: fix --ignore-missing with checksums starting with 00
+	* NEWS: Mention the fix.
+	* src/md5sum.c (digest_file): Add a new MISSING parameter to
+	return whether the file was missing, separately from the digest.
+	* tests/misc/md5sum.pl: Add a test case.
+	Fixes http://bugs.gnu.org/24795
+
+2016-10-22  Bishop Bettini  <bishop.bettini@gmail.com>
+
+	doc: fix typo in stdbuf man page
+	* man/stdbuf.x: Correct spelling of immediately.
+	Fixes http://bugs.gnu.org/24763
+
+2016-10-16  Jim Meyering  <meyering@fb.com>
+
+	maint: we use die; remove now-unnecessary uses of abort
+	* src/expr.c (integer_overflow): Remove an abort-after-die.
+	* src/paste.c (write_error): Likewise.
+	* src/sort.c (badfieldspec): Likewise.
+	* src/tr.c (string2_extend): Likewise. Also remove a few
+	break statements, each after an abort.
+
+2016-10-16  Pádraig Brady  <P@draigBrady.com>
+
+	all: use die() rather than error(EXIT_FAILURE)
+	die() has the advantage of being apparent to the compiler
+	that it doesn't return, which will avoid warnings in some cases,
+	and possibly generate better code.
+	* cfg.mk (sc_die_EXIT_FAILURE): A new syntax check rule to
+	catch any new uses of error (CONSTANT, ...);
+
+2016-10-16  Jim Meyering  <meyering@fb.com>
+
+	build: also distribute new file, src/die.h
+	* src/local.mk (noinst_HEADERS): Add die.h.
+
+2016-10-15  Jim Meyering  <meyering@fb.com>
+
+	build: add die.h; avoid new warnings from GCC 7
+	* src/die.h (die): New file/function from grep.
+	Note: we expect this file to migrate to gnulib.
+	* src/csplit.c: Include die.h.
+	(check_format_conv_type): Use die in place of error-nonzero;break;
+	* src/install.c (strip): Likewise.
+	* src/nl.c (proc_text): Likewise.  This also suppresses a new warning
+	from GCC 7's -Werror=strict-overflow.
+	* src/tail.c (parse_options): Likewise.
+	* src/basename.c (main): Adjust "fall through" comment
+	so that GCC 7's -Wimplicit-fallthrough honors it.
+	* src/cp.c (main): Add a "fall through" comment.
+	* src/ls.c (gobble_file): Likewise.
+	(get_funky_string): Adjust a "fall through" comment so it is
+	recognized.
+	* cfg.mk (exclude_file_name_regexp--sc_system_h_headers): Add die.h
+	to this list of exempt src/*.h files.
+
+	maint: pr: avoid new GCC 7 warning
+	* src/pr.c (main): Avoid this warning from GCC 7:
+	src/pr.c:1119:6: error: assuming signed overflow does not occur when \
+	  simplifying conditional to constant [-Werror=strict-overflow]
+	   if (n_files == 0)
+
+	gnulib: update to latest and adapt printf-quote.sh test
+	* .gitignore: Add /lib/limits.h.
+	* tests/misc/printf-quote.sh: Reflect that a single quote is now
+	rendered as "'", rather than as ''\'''.
+
+2016-10-04  Pádraig Brady  <P@draigBrady.com>
+
+	rm: disallow --n alias for --no-preserve-root
+	* src/rm.c (main): Ensure the full --no-preserve-root
+	option is specified, rather than allowing --n etc.
+	* tests/rm/r-root.sh: Add a test case.
+	* NEWS: Mention the change in behavior.
+
+	Improved by Jim Meyering.
+	Fixes http://bugs.gnu.org/24604
+
+2016-09-28  Pádraig Brady  <P@draigBrady.com>
+
+	tail: -F now always processes initially untailable files
+	which was not the case when inotify was not available.
+
+	* src/tail.c (any_live_files): Simplify, since the IGNORE
+	flag is now only set when a file should be ignored indefinitely.
+	(recheck): Only output the "giving up on name" message
+	when that's actually the case.  Only set the IGNORE flag
+	when ignoring a file indefinitely.
+	(tail_file): Likewise.
+	* tests/tail-2/retry.sh: Add a test case.  Also run
+	all existing test cases with and without inotify.
+	NEWS: Mention the fix.
+	THANKS.in: Add the reporter.
+	Fixes http://bugs.gnu.org/24495 which was detected
+	using Symbolic Execution techniques developed in
+	the course of the SYMBIOSYS research project at
+	COMSYS, RWTH Aachen University.
+
+2016-09-22  Jim Meyering  <meyering@fb.com>
+
+	who: avoid new warning from upcoming gcc-7
+	* src/who.c (idle_string): This function would fail to compile
+	with -Werror and today's built-from-git gcc due to this warning:
+	src/who.c: In function 'print_user':
+	src/who.c:201:36: error: may write format character ':' at offset 4 \
+	  past the end of the destination [-Werror=format-length=]
+	           sprintf (idle_hhmm, "%02d:%02d",
+	                                    ^~~~~
+	The fix is to use an assertion to inform gcc of the existing
+	invariant that guarantees the number of hours is less than 24.
+
+2016-09-19  Paul Eggert  <eggert@cs.ucla.edu>
+
+	ls: fix %%b format and precompute more
+	The old code mishandled --time-spec='+%%b', as it misinterpreted
+	the '%b' as being the month abbreviation.  Also, it mishandled
+	the extremely unlikely case of a month abbreviation containing '%'.
+	The performance part of this patch sped up 'ls' by about 1% on my
+	little benchmark of 'ls -lR' on the source directory in the
+	en_US.UTF-8 locale (Fedora 24 x86-64).
+	* NEWS: Document the bug fix.
+	* src/ls.c (first_percent_b, abformat_init): New static functions.
+	(ABFORMAT_SIZE): New constant.
+	(use_abformat): New static var.
+	(abmon, required_mon_width): Remove these static vars.
+	(abmon_init): Now accepts a pointer to abmon, and returns a boolean.
+	All callers changed.  Reject month abbrs containing '%', as these
+	would mess up strftime.  Simplify mbsalign result checking,
+	since (size_t) -1 exceeds ABFORMAT_SIZE.
+	(abformat_init, align_nstrftime): Precompute all 24 formats at
+	startup, rather than computing a format for each time stamp.
+	(decode_switches): Call abformat_init instead of abmon_init.
+	(align_nstrftime): Accept recentness bool instead of format.
+	All callers changed.
+	* tests/misc/time-style.sh: Test for format with '%%b'.
+
+2016-09-11  George Burgess IV  <gbiv@chromium.org>
+
+	pinky,who: remove redeclarations of ttyname
+	Given that `ttyname` is already conditionally declared in src/system.h,
+	other declarations are redundant and problematic for example in ChromeOS
+	which has a new FORTIFY implementation that, as an artifact of how it's
+	implemented, causes the compiler to complain if certain standard library
+	functions are redeclared without special compiler-specific attributes.
+
+	* src/pinky.c: Remove declaration (which was unused anyway).
+	* src/who.c: Remove declaration.
+	* src/system.h (getlogin, getuid, geteuid, getgrgid, getpwuid, ttyname):
+	Add the parameter type to the declarations to avoid warnings when these
+	backup declarations are used.
+
+2016-09-10  Jim Meyering  <meyering@fb.com>
+
+	gnulib: update to latest, for getprogname fixes
+	Compiling in gnulib-tests/ would fail on some platforms
+	due to a missing lib/assert.h.  Reported by Assaf Gordon in
+	https://lists.gnu.org/archive/html/coreutils/2016-09/msg00016.html
+
+2016-09-09  Paul Eggert  <eggert@cs.ucla.edu>
+
+	cp: use FICLONE instead of BTRFS_IOC_CLONE
+	This doesn't affect the generated code on my system; it's merely
+	a cleaner way to use the recently-introduced Linux-specific API.
+	* m4/jm-macros.m4 (gl_CHECK_ALL_HEADERS): Check for linux/fs.h.
+	* src/copy.c: Include <linux.fs.h> if available.
+	(FICLONE) [__linux__]: Define if not already defined.
+	(clone_file): Use FICLONE instead of the older BTRFS_IOC_CLONE,
+	as this ioctl is no longer btrfs-specific.
+
+2016-09-08  Assaf Gordon  <assafgordon@gmail.com>
+
+	date: add '--debug' option
+	Usage example:
+	    date --debug -d 'now + 3 days'
+
+	Print parsing and debugging information to stderr when using date's
+	-d/--date option.
+	See: http://lists.gnu.org/archive/html/coreutils/2016-01/msg00076.html
+
+	* src/date.c (main): Add '--debug' option, enable debugging
+	in gnulib's parse-datetime.y module.
+	* tests/misc/date.pl: Repeat tests with '--debug' enable, ensure
+	no regression.
+	* tests/misc/date-debug.sh: Test output of '--debug' option.
+	* tests/local.mk: Add above test.
+	* NEWS: Mention new option.
+	* doc/coreutils.texi: Likewise.
+
+2016-09-08  Paul Eggert  <eggert@cs.ucla.edu>
+
+	sort: port to strict C + valgrind
+	* bootstrap.conf (gnulib_modules): Add flexmember.
+	* src/sort.c: Include flexmember.h.
+	(struct tempnode): Make the last member flexible.
+	(create_temp_file): Port to strict C11/C99 rules for
+	allocation alignment with flexible array members.
+
+	build: update gnulib submodule to latest
+
+2016-09-07  Pádraig Brady  <P@draigBrady.com>
+
+	factor: reinstate immediate output with interactive use
+	* src/factor.c (lbuf_putc): Only buffer more than a line
+	when not using the tool interactively.
+	* NEWS: Mention the bug fix.
+	Fixes http://pad.lv/1620139
+
+2016-09-07  Kamil Dudka  <kdudka@redhat.com>
+
+	ls: allow interruption when reading slow directories
+	Postpone installation of signal handlers until they're needed.
+	That is right before the first escape sequence is printed.
+
+	* src/ls.c (signal_setup): A new function refactored from main()
+	to set and restore signal handlers.
+	(main): Move signal handler setup to put_indicator()
+	so that the default signal handling is untouched as long as possible.
+	Adjusted condition for restoring signal handlers to reflect the change.
+	(put_indicator): Install signal handlers if called for the very first
+	time.  It uses the same code that was in main() prior to this commit.
+	* NEWS: Mention the improvement.
+
+	See https://bugzilla.redhat.com/1365933
+	Fixes http://bugs.gnu.org/24232
+
+2016-09-01  Pádraig Brady  <P@draigBrady.com>
+
+	doc: fix typo in date example
+	* doc/coreutils.texi (date invocation): Add a missing quotation mark.
+	Fixes http://bugs.gnu.org/24349
+
+2016-08-31  Jim Meyering  <meyering@fb.com>
+
+	dircolors: recognize .zst and .tzst suffixes
+	* src/dircolors.hin: Add .zst and .tzst suffixes for the
+	Zstandard/zstd compression tools.  See http://zStd.net and
+	https://code.facebook.com/posts/1658392934479273/
+
+2016-08-30  Jim Meyering  <meyering@fb.com>
+
+	maint: tr: tweak/make-consistent a pair of loop indices
+	* src/tr.c (unquote): Use indices of type "unsigned int", rather
+	than a mix or "size_t" and "int", presuming that no command-line-
+	specified string will have length longer than UINT_MAX.
+
+	tr: move decls "down"
+
+2016-08-29  Jim Meyering  <meyering@fb.com>
+
+	ptx: avoid new warning/error from upcoming gcc-7.x
+	* src/ptx.c (fix_output_parameters): Switch to an unsigned type that
+	matches the OCCURS.file_index type. This avoids the following error
+	from gcc-7.0.0 20160829 (experimental):
+	  src/ptx.c:1220:14: error: assuming signed overflow does not occur \
+	    when simplifying conditional to constant [-Werror=strict-overflow]
+	          if (file_index > 0)
+
+2016-08-18  Pádraig Brady  <P@draigBrady.com>
+
+	cp: with --parents --no-preserve=mode don't copy dir perms
+	* src/cp.c (make_dir_parents_private): Use default permissions for
+	created directories when --no-preserve=mode is specified.
+	* tests/cp/cp-parents.sh: Add a test case.
+	* NEWS: Mention the fix.
+	Fixes http://bugs.gnu.org/24251
+
+	doc: fix ambiguous multiplier info in dd man page
+	* src/dd.c (usage): Add a comma which is significant for
+	the rewrapping done in man pages.
+
+2016-08-09  Assaf Gordon  <assafgordon@gmail.com>
+
+	maint: refactor common expand(1) and unexpand(1) code
+	* src/expand.c, src/unexpand.c: Move global variables from here...
+	* src/expand-common.h, src/expand-common.c: ... to here.
+	* src/expand.c, src/unexpand.c: (parse_tab_stops, validate_tab_stops,
+	next_file): Move identical functions to new module.
+	(add_tab_stop): Move to new module, including additional code from
+	'unexpand' (keeping max_column_width) which will have no effect in when
+	used in 'expand'. Refactor common next-column calculation code
+	into a new function 'get_next_tab_column'.
+	* src/local.mk: (src_expand_SOURCES, src_unexpand_SOURCES): Add
+	'expand-common.c'; (noinst_HEADERS): Add 'expand-common.h'.
+	* po/POTFILES.in: Add 'expand-common.c'.
+	* tests/misc/expand.pl: Add more tests.
+	* tests/misc/unexpand.pl: Likewise.
+	* TODO: Move conclusions to above test after investigation.
+
+2016-08-03  Philipp Thomas  <pth@suse.de>
+
+	df: improve performance with many mount points
+	Use hash table for seaching in filter_mount_list() and get_dev()
+
+	This improves performance for 20K mount entries from:
+	  real    0m1.731s
+	  user    0m0.532s
+	  sys     0m1.188s
+	to:
+	  real    0m1.066s
+	  user    0m0.028s
+	  sys     0m1.032s
+
+	* src/df.c (devlist_table): Define hash table.
+	(devlist_hash): Add hash function.
+	(devlist_compare): Add hash comparison function.
+	(devlist_for_dev): Add lookup function.
+	(devlist_free): Add cleanup function.
+	(filter_mount_list): Use the above hash table.
+	While at it, rename the variable 'devlist' to 'seen_dev' for
+	better readability.
+	(me_for_dev): Use the above lookup function.
+	NEWS: Mention the improvement.
+	THANKS.in: Remove the committer; add original submitter Josef Cejka.
+
+2016-07-28  Pádraig Brady  <P@draigBrady.com>
+
+	doc: revert recent date(1) synopsis change
+	* src/date.c (usage): This was thought to introduce other ambiguities,
+	and was inconsistent with the format presented in the touch(1) docs.
+	* doc/coreutils.texi (date invocation): Likewise.
+	See http://bugs.gnu.org/24077
+
+2016-07-27  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	maint: pacify GCC 6 with -Wnull-dereference
+	src/id.c:249:29: error: potential null pointer dereference \
+	[-Werror=null-dereference]
+	       pw_name = xstrdup (pwd->pw_name);
+	                          ~~~^~~~~~~~~
+	src/whoami.c:89:11: error: potential null pointer dereference \
+	[-Werror=null-dereference]
+	   puts (pw->pw_name);
+	         ~~^~~~~~~~~
+
+	* src/id.c (main): Explicitly exit with EXIT_FAILURE after an eror to
+	help gcc-6 to detect that the dereferenced pointer is valid.
+	* src/whoami.c (main): Likewise.
+
+2016-07-27  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	build: update gnulib submodule to latest
+	Mainly for
+	* 77d36b5 obstack: pacify GCC 6 with -Wnull-dereference
+
+2016-07-27  Jim Meyering  <meyering@fb.com>
+
+	maint: skip a check when en_US.UTF-8 collation rules are broken
+	* cfg.mk (sc_THANKS_in_sorted): This check would fail on systems
+	for which "." is not ignored.  Add a quick sort-based check for
+	that error, and skip the check on any broken system.
+
+2016-07-27  Pádraig Brady  <P@draigBrady.com>
+
+	doc: make date(1) synopsis consistent with output +FORMAT
+	* src/date.c (usage): Make the characters used to summarize
+	the input format, match the output +FORMAT characters.
+	* doc/coreutils.texi (date invocation): Likewise.
+	Fixes http://bugs.gnu.org/24077
+
+2016-07-27  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	maint: fix dependency of man/arch.1
+	The following is a reproducer for the wrong dependency:
+
+	  $ ./configure --enable-install-program=arch
+	  $ make
+	  $ rm -f src/arch man/arch.1
+	  $ make man/arch.1
+	    GEN      man/arch.1
+	  help2man: can't get `--help' info from man/arch.td/arch
+	  Try `--no-discard-stderr' if option outputs to stderr
+	  Makefile:14378: recipe for target 'man/arch.1' failed
+	  make: *** [man/arch.1] Error 127
+
+	* man/local.mk (man/arch.1): Change to depend on src/arch rather than
+	src/uname: while the arch binary depends on uname.c and uname-arch.c,
+	its man page depends on the arch binary.
+
+	Reported downstream by Rodrigues Goldwyn <rgoldwyn@suse.com> in
+	https://build.opensuse.org/request/show/415172
+
+2016-07-18  Kamil Dudka  <kdudka@redhat.com>
+
+	sort: with -h, disallow thousands separator between number and unit
+	* src/sort.c (traverse_raw_number): Accept thousands separator only
+	if it is immediately followed by a digit.
+	* tests/misc/sort-h-thousands-sep.sh: Cover the fix for this bug.
+
+	Suggested by Pádraig Brady in http://bugs.gnu.org/24015
+
+2016-07-18  Kamil Dudka  <kdudka@redhat.com>
+
+	sort: make -h work with -k and blank used as thousands separator
+	* src/sort.c (traverse_raw_number): Allow to skip only one occurrence
+	of thousands_sep to avoid finding the unit in the next column in case
+	thousands_sep matches as blank and is used as column delimiter.
+	* tests/misc/sort-h-thousands-sep.sh: Add regression test for this bug.
+	* tests/local.mk: Reference the test.
+	* NEWS: Mention the bug fix.
+	Reported at https://bugzilla.redhat.com/1355780
+	Fixes http://bugs.gnu.org/24015
+
+	maint: sort.c: deduplicate code for traversing numbers
+	* src/sort.c (traverse_raw_number): New function for traversing numbers.
+	(find_unit_order): Use traverse_raw_number() instead of open-coding it.
+	(debug_key): Likewise.
+
+2016-07-08  Kamil Dudka  <kdudka@redhat.com>
+
+	install: with -Z, set default SELinux context for created directories
+	* doc/coreutils.texi (install invocation): Update -Z documentation.
+	* src/install.c (make_ancestor): Set default security context before
+	calling mkdir() if the -Z option is given.
+	(process_dir): Call restorecon() on the destination directory if the
+	-Z option is given.
+	(usage): Update -Z documentation.
+	* tests/install/install-Z-selinux.sh: A new test for 'install -Z -D'
+	and 'install -Z -d' based on tests/mkdir/restorecon.sh.
+	* tests/local.mk: Reference the test.
+	* NEWS: Mention the improvement.
+	Reported at https://bugzilla.redhat.com/1339135
+	Fixes http://bugs.gnu.org/23868
+
+2016-07-06  Pádraig Brady  <P@draigBrady.com>
+
+	tests: avoid false failure on 32 bit in readdir() test
+	* tests/rm/rm-readdir-fail.sh: Since we use the returned dirent
+	from the readdir wrapper it must be the correct type and not
+	just cast.  Therefore setup so that we only have to define a
+	wrapper for readdir(), which works appropriately on 32 and 64 bit.
+	Issue reported by Bernhard Voelker, where rm was seen to invoke
+	rmdir() on invalid file names.
+
+2016-07-02  Assaf Gordon  <assafgordon@gmail.com>
+
+	tests: improve recent seq EPIPE test
+	Follow-up to commit c92585b1: improve epipe test script, with
+	suggestions from Bernhard Voelker and Pádraig Brady.
+	see: http://lists.gnu.org/archive/html/coreutils/2016-04/msg00067.html .
+
+	* tests/misc/seq-epipe.sh: Avoid too many subshells,
+	  stricter validation of errors and output from seq,
+	  skip if trapping SIGPIPE is not supported.
+
+2016-06-29  Pádraig Brady  <P@draigBrady.com>
+
+	stty: fix sane setting of susp to ^z on Solaris
+	* src/stty.c: Disable setting of "swtch" to ^z as that
+	conflicts with and disables using ^z as "susp".
+	* NEWS: Mention the bug fix.
+	Reported and tested by Rich Burridge at:
+	http://bugs.gnu.org/23866
+
+2016-06-26  Peter Benie  <pjb1008@cam.ac.uk>
+
+	tests: verify that fts diagnoses readdir() failures
+	* tests/rm/rm-readdir-fail.sh: A new test to simulate readdir()
+	failing immediately or after returning a few entries, and verifying
+	that rm does the appropriate thing.
+	This was initially reported at:
+	http://bugzilla.opensuse.org/show_bug.cgi?id=984910
+	where it was mentioned that readdir() may fail
+	when an NFS server has a poor readdir cookie implementation.
+
+2016-06-26  Pádraig Brady  <P@draigBrady.com>
+
+	all: update gnulib submodule and tests/init.sh to latest
+	* gnulib: Update to latest.
+	* NEWS: Specifically mention the fts readdir() fix
+	and reindent to standard indentation.
+	* tests/init.sh: Update from gnulib.
+
+2016-06-25  Paul Eggert  <eggert@cs.ucla.edu>
+
+	maint: simplify partial writes etc. in 'yes'
+	* src/yes.c: Include full-write.h.
+	(main): Use full_write, not write, to simplify handling of partial
+	writes.  Don't bother using stdio to output data; just use
+	full_write with a buffer as large as needed.  Reuse operand
+	strings if possible, and if the buffer would otherwise be large.
+
+2016-06-24  Pádraig Brady  <P@draigBrady.com>
+
+	yes: handle short writes
+	* src/yes.c (main): Loop over the write buffer to
+	handle the case where write may write less than requested.
+	* NEWS: Mention the bug fix.
+	Reported by Paul Eggert.
+
+	yes: fix copy and paste issue with previous commit
+	* src/yes.c (main): Output 'y' not '-'.
+	* tests/misc/yes.sh: Add a test for default output.
+
+2016-06-23  Paul Eggert  <eggert@cs.ucla.edu>
+
+	maint: work even if argc == INT_MAX
+	GCC 7 warned about undefined behavior in this unlikely case.
+	Problem reported by Jim Meyering in: http://bugs.gnu.org/23825
+	* src/md5sum.c (main):
+	* src/paste.c (main):
+	* src/yes.c (main):
+	Avoid undefined behavior when argc == INT_MAX.
+
+2016-06-01  Pádraig Brady  <P@draigBrady.com>
+
+	doc: clarify sort --key handling of default field separators
+	* doc/coreutils.texi (sort invocation): Mention in the summary
+	dicussion that --key is used to specify fields.  Give a summary
+	in the --key description, of the most common use case of specifying
+	a field, and that by default those fields include the blank separators
+	at the start of each field in the comparisons.
+
+2016-06-01  Assaf Gordon  <assafgordon@gmail.com>
+
+	sort: modify 'leading spaces' debug warning scenarios
+	Print warning regardless of locale, avoid warning if key is zero width.
+	Problem reported by Karl Berry in http://bugs.gnu.org/23665 .
+
+	* src/sort.c: (key_warnings): change conditions for 'leading spaces'
+	warning.
+	* tests/misc/sort-debug-warn.sh: adjust tests accordingly.
+
+2016-06-01  Assaf Gordon  <assafgordon@gmail.com>
+
+	tests: sort-debug-warn: add progress information lines
+	Easier troubleshooting of individual 'sort --debug' messages.
+	Discussed in http://bugs.gnu.org/23665 .
+
+	* tests/misc/sort-debug-warn.sh: add progress number before each sort
+	invocation.
+
+2016-05-15  Pádraig Brady  <P@draigBrady.com>
+
+	dircolors: output colors for any $TERM matching *color*
+	* src/dircolors.hin: Reduce the list by replacing all specific
+	mentions of "color" with the pattern "*color*".  This will also
+	cater for other entries like "konsole-256color".
+	Fixes http://bugs.gnu.org/23542
+
+2016-05-14  KOBAYASHI Takashi  <a1415tk@aiit.ac.jp>
+
+	nl: reset numbering for each section
+	* NEWS: Mention the bug fix.
+	* src/nl.c (proc_body, proc_footer): Reset numbering here too.
+	* doc/coreutils.texi (nl invocation): Adjust for behavior change.
+	* tests/misc/nl.sh: Add a test case.
+
+2016-05-12  Pádraig Brady  <P@draigBrady.com>
+
+	stat,tail: add support for the SMB2 remote file system
+	* stc/stat.c (human_fstype): Add file system ID definition,
+	and use "smb2" as the name.
+	* NEWS (Improvements): Mention the change.
+	Fixes http://bugs.gnu.org/23516
+
+2016-05-04  Jim Meyering  <meyering@fb.com>
+
+	maint: avoid new warning from gcc (GCC) 7.0.0 20160503 (experimental)
+	* src/id.c (main): When configured with --enable-gcc-warnings and using
+	the very latest gcc built from git, building would fail with this:
+	  src/id.c:200:8: error: assuming signed overflow does not occur when \
+	    simplifying conditional to constant [-Werror=strict-overflow]
+	     bool default_format = (just_user + just_group + just_group_list
+	          ^~~~~~~~~~~~~~
+	Rewrite to use bool-appropriate operators.
+
+2016-04-26  Pádraig Brady  <P@draigBrady.com>
+
+	tests: avoid false failure when df lists no root file system
+	* tests/df/skip-duplicates.sh: Skip the test when there is no
+	'/' entry listed by df, which was seen in certain chroot setups.
+
+2016-04-24  Assaf Gordon  <assafgordon@gmail.com>
+
+	seq: detect and report I/O errors immediately
+	Ensure I/O errors are detected (and terminate seq), preventing seq
+	from infloop (or running for long time with a large
+	range) upon write errors or ignored SIGPIPE. Examples:
+
+	     seq 1 inf > /dev/full             (seq_fast)
+	     seq 1.1 0.1 inf >/dev/full        (print_numbers)
+
+	* src/seq.c (io_error): A new function to diagnose appropriate
+	stdio errors and exit the program with failure status.
+	(seq_fast, print_numbers): Explicitly check for write errors
+	and terminate the program with diagnostic.
+	* tests/misc/seq-io-errors.sh: Test error detection with /dev/full.
+	* tests/misc/seq-epipe.sh: Test error detection with broken pipes.
+	* tests/local.mk: Add new tests.
+	* NEWS: Mention the fix.
+
+2016-04-22  Pádraig Brady  <P@draigBrady.com>
+
+	stat,tail: add support for Windows Subsystem for Linux
+	* src/stat.c (human_fstype): Add file system ID definition,
+	and use "wslfs" as the name.
+	* NEWS (Improvements): Mention the change.
+	Fixes http://bugs.gnu.org/23273
+
+2016-04-21  Pádraig Brady  <P@draigBrady.com>
+
+	yes: avoid redundant diagnostics on write error
+	* src/yes.c (main): For large inputs only write a single
+	diagnostic for write errors.
+	* tests/misc/yes.sh: Test when /dev/full is available.
+
+	sleep,timeout: support overflowing floating point values
+	* src/sleep.c (main): Allow ERANGE since we allow "inf" values.
+	* src/timeout.c (parse_duration): Likewise.
+	* tests/misc/sleep.sh: New file. Tests for sleep(1).
+	* tests/misc/timeout-parameters.sh: Add case for newly allowed
+	$LDBL_MAX.  Also use returns_ throughout the file.  Also avoid
+	small timeout values which might give false failures under load.
+
+	tests: avoid potential overflows with `expr`
+	* cfg.mk (sc_prohibit_expr_unsigned): expr uses intmax_t internally
+	when GMP is not available, so flag any uses of unsigned limits.
+	* tests/misc/timeout-parameters.sh: Remove the overflow related
+	to UINT_MAX as it's handled by the following case.  Change the
+	following case from 99... to $TIME_T_OFLOW to be more expressive
+	in what it's actually testing.  Directly check that commands succeed,
+	rather than inspecting $? afterwards.
+	* tests/dd/skip-seek-past-dev.sh: Guard against large device sizes.
+	* tests/id/setgid.sh: Protect: Guard against large group IDs.
+	* tests/misc/cut-huge-range.sh: Tweak comment to avoid syntax check.
+	It's tempting to simplify to just skip the test if expr fails,
+	but SIZE_MAX > INTMAX_MAX is the common case.
+
+2016-04-20  Pádraig Brady  <P@draigBrady.com>
+
+	tests: fix recent false failure due to a race
+	* tests/cp/parent-perm-race.sh: This new race introduced in
+	commit v8.25-5-g632eda5 is quite hard to hit, but is due to
+	`ls > fifo` doing write()/close()/exit() once `cp` has
+	open() the source fifo.  Then the subsequent comparison of the
+	destination file may fail due to the file being missing or empty.
+	Previously `ls` generated output that was independent of `cp`.
+	Now we must wait for `cp` to finish before inspecting the
+	destination file that it wrote.
+
+2016-04-18  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	tests: let mkdir/p-v.sh fail when compare fails
+	* tests/mkdir/p-v.sh: Set fail=1 when compare fails: the latter only
+	sets a non-Zero return code; evaluating that is up to the caller.
+
+2016-04-14  Bernhard Voelker  <mail@bernhard-voelker.de>
+
+	seq: do not allow NaN arguments
+	* src/seq.c (isnan): Define macro.
+	(scan_arg): Add check if the given argument is NaN, and exit with
+	a proper error diagnostic in such a case.
+	(usage): Document it.
+	* tests/misc/seq.pl: Add tests.
+	* doc/coreutils.texi (seq invocation): Document the change.
+	* NEWS (Changes in behavior): Mention the change.
+
+	seq: do not allow 0 as increment value
+	* src/seq.c (main): Exit with an error diagnostic when the given
+	step value is Zero.
+	(usage): Document it.
+	* doc/coreutils.texi (seq invocation): Likewise.
+	* tests/misc/seq.pl: Add tests.
+	* NEWS (Changes in behavior): Mention the change.
+	Reported by Маренков Евгений in:
+	http://bugs.gnu.org/23110
+
+2016-04-14  Yigal Korman  <yigal@plexistor.com>
+
+	stat,tail: add support for M1FS
+	* src/stat.c (human_fstype): Add file system ID definition.
+	* NEWS (Improvements): Mention the change, moving the previously added
+	"prl_fs" change note from "Changes in behavior" to here.
+	Fixes http://bugs.gnu.org/23283
+
+2016-03-31  Pádraig Brady  <P@draigBrady.com>
+
+	stat: report type for "prl_fs" file systems
+	* src/stat.c (human_fstype): Identify the parallels file system.
+	Also tag as remote so that tail(1) doesn't use inotify, which
+	fails to detect changes made outside a VM.
+	Fixes http://bugs.gnu.org/23143
+
+2016-03-17  Paul Eggert  <eggert@cs.ucla.edu>
+
+	date ls pr: fix time zone abbrs on SysV platforms
+	The problematic code computed a struct tm in one time zone, and
+	then printed it or converted it to a string in another.  To be
+	portable the same time zone needs to be used for both operations.
+	On GNU platforms this is not an issue, but incorrect output can be
+	generated on System V style platforms like AIX where time zone
+	abbreviations are available only in the 'tzname' global variable.
+	Problem reported by Assaf Gordon in: http://bugs.gnu.org/23035
+	* NEWS: Document the bug.
+	* src/date.c (show_date):
+	* src/ls.c (long_time_expected_width, print_long_format):
+	* src/pr.c (init_header):
+	* src/stat.c (human_time): Use localtime_rz instead of localtime,
+	so that the time zone information is consistent for both localtime
+	and time-formatting functions like fprintftime and nstrftime.  For
+	'stat' this change is mostly just a code cleanup but it also
+	causes stat to also print nanoseconds when printing time stamps
+	that are out of localtime range, as this is more consistent with
+	what other programs do.  For programs other than 'stat' this fixes
+	bugs with time zone formats that use %Z.
+	* src/du.c, src/pr.c (localtz): New static var.
+	(main): Initialize it.
+	* src/du.c (show_date): New time zone argument, so that localtime
+	and fprintftime use the same time zone information.  All callers
+	changed.
+	* tests/misc/time-style.sh: New file.
+	* tests/local.mk (all_tests): Add it.
+	* tests/misc/date.pl: Test alphabetic time zone abbreviations.
+
+2016-03-15  Jim Meyering  <meyering@fb.com>
+
+	maint: remove gl/lib/reg*.c.diff; no longer needed
+	* gl/lib/regcomp.c.diff: Remove file, now that gnulib's
+	regcomp.c compiles regex.c with -Wno-unused-parameter.
+	* gl/lib/regex_internal.h.diff: Likewise.
+	* gl/lib/regex_internal.c.diff: This file induced a change to ensure
+	that the "Idx" type was unsigned and to remove a few "VAR < 0"
+	comparisons.  These days, it is probably fine to stay in sync with
+	gnulib/glibc's copies
+	of these files, so remove these patches, too.
+	* gl/lib/regexec.c.diff: Likewise.
+	Prompted by a report by Assaf Gordon and a suggestion from Paul Eggert.
+
+2016-03-09  Eric Blake  <eblake@redhat.com>
+
+	build: update gnulib submodule to latest
+	Mainly for:
+	*bdb72bc6 set-permissions: fix compilation on Cygwin
+
+	* bootstrap: Sync with gnulib.
+	* gl/lib/regcomp.c.diff: Regenerate against latest gnulib.
+
+2016-03-07  Jim Meyering  <meyering@fb.com>
+
+	tests: avoid false-failure of split/filter.sh on XFS
+	* tests/split/filter.sh: Use OFF_T_MAX-1 rather than OFF_T_MAX
+	as the size of a test file, to avoid false failure on an XFS file
+	system (or any file system permitting a file of size OFF_T_MAX).
+	Reported as http://bugs.gnu.org/22931
+
+2016-03-04  Eric Blake  <eblake@redhat.com>
+
+	test: Document that -a and -o are undesirable
+	POSIX recommends avoiding -a and -o, for good reason.
+	src/test.c (usage): Mention that inherent ambiguities exist with
+	binary -a and -o.
+	Problem reported by Martin Gebert in: http://bugs.gnu.org/22909
+
+2016-02-23  Paul Eggert  <eggert@cs.ucla.edu>
+
+	all: be less strict about usage if POSIX 2008
+	sort, tail, and uniq now support traditional usage like 'sort +2'
+	and 'tail +10' on systems conforming to POSIX 1003.1-2008 and later.
+	* NEWS: Document this.
+	* doc/coreutils.texi (Standards conformance, tail invocation)
+	(sort invocation, uniq invocation, touch invocation):
+	Document new behavior, or behavior's dependence on POSIX 1003.1-2001.
+	* src/sort.c (struct keyfield.traditional_used):
+	Rename from obsolete_used, since implementations are now allowed
+	to support it.  All uses changed.
+	(main): Allow traditional usage if _POSIX2_VERSION is 200809.
+	* src/tail.c (parse_obsolete_option): Distinguish between
+	traditional usage (which POSIX 2008 and later allows) and obsolete
+	(which it still does not).
+	* src/uniq.c (strict_posix2): New function.
+	(main): Allow traditional usage if _POSIX2_VERSION is 200809.
+	* tests/misc/tail.pl: Test for new behavior.
+
+	doc: document sort -o F F danger
+	Problem reported by Yanyan Jiang 蒋炎岩 in: http://bugs.gnu.org/22769
+	* doc/coreutils.texi (sort invocation):
+	Mention possibility of 'sort -o F F' data loss during crashes.
+
+2016-02-16  Daniel Lockyer  <thisisdaniellockyer@gmail.com>
+
+	date: free timezone variable to avoid valgrind warning
+	* src/date.c (main): Free TZ variable to pacify valgrind, guarded
+	by IF_LINT.
+
+2016-02-16  Pádraig Brady  <P@draigBrady.com>
+
+	split: adjust recent --number changes
+	* src/split.c (lines_rr): Reinstate the conditional
+	setting of the WROTE boolean, as otherwise split -n r/1 would
+	consume all input when all --filter commands are stopped.
+	There was a test in place to check for this, but
+	it was incorrect as detailed below.
+	(input_file_size): Immediately disallow --number with
+	non seekable inputs, as such an invocation is not currently
+	generally supported and will fail as the data overflows
+	the internal buffer.
+	* tests/split/l-chunk.sh: Adjust to again disallow -n /dev/zero.
+	Also change all '&& fail=1' checks to use the 'returns_ 1' form.
+	* tests/split/filter.sh: Change the no longer supported /dev/zero
+	case to a regular $OFF_T_MAX file (supported on XFS for example).
+	Also fix the timeout(1) commands so they're not subject to
+	pipefail issues.
+
+2016-02-15  Göran Uddeborg  <goeran@uddeborg.se>
+
+	stty: fix translated --help so the gettext header is not printed
+	* src/stty.c (usage): Remove an erroneous call to translate an
+	empty string, added in commit v8.23-112-g564f84a, which results
+	in the gettext header being printed for translated languages.
+	* THANKS.in: Remove the now committer.
+	* NEWS: Mention the bug fix.
+
+2016-02-12  Paul Eggert  <eggert@cs.ucla.edu>
+
+	tests: don't wait forever on GNU/Hurd
+	* tests/cp/parent-perm-race.sh: Add timeouts so that the test does
+	not wait forever on GNU/Hurd.  This does not fix the underlying
+	bug but at least lets the tests make progress.
+	Problem reported by Nelson H.F. Beebe in: http://bugs.gnu.org/22624
+	Also, check that 'cp' actually copies the data; this is a better
+	test anyway, and simplifies the test code.
+	Also, avoid unlikely race if 'pid' is set in the environment.
+
+	split: fix problems with /dev/zero
+	Problem reported by Nelson H.F. Beebe in: http://bugs.gnu.org/22624
+	Other problems also fixed: basically, the code got confused because
+	GNU/Linux reports that /dev/zero has size zero.
+	* src/split.c (input_file_size): Now takes struct stat *, not just
+	size.  Always store the first buffer.  All callers changed.  Treat
+	/dev/zero as an infinitely-large file, both on GNU/Linux where
+	fstat and lseek say its size is zero, and on GNU/Hurd where they
+	say the size is OFF_T_MAX.
+	(cwrite): Return true on success.
+	(bytes_split): Don't try to read past EOF, and stop if a write fails.
+	(lines_rr): Omit stray check for ignorable errno.
+	(main): Get file size only when n_units > 1, since that's the only
+	time it is needed.  Defer most of the work to input_file_size.
+	* tests/split/l-chunk.sh: Adjust tests to match new behavior
+	on oddball inputs.
+
+2016-01-30  Vincent Lefevre  <vincent@vinc17.net>
+
+	doc: fix the --iso-8601 example in date --help
+	* src/date.c (usage): The colon is used in the timezone offset
+	since commit v8.24-64-g17bbf6c.
+	* THANKS.in: Remove committer.
+	Fixes http://bugs.gnu.org/22491
+
+2016-01-25  Pádraig Brady  <P@draigBrady.com>
+
+	build: avoid dynamic linking issue on Solaris sparc
+	Solaris Studio 12 on sparc (not x86) will not remove
+	unused functions, thus leaving a reference to an
+	undefined program_name symbol from emit_try_help().
+
+	* src/system.h (emit_try_help): Change from an inline function
+	to a macro, so that the inline function is not actually
+	defined in libstdbuf.c.
+	Fixes http://bugs.gnu.org/22430
+
 2016-01-20  Pádraig Brady  <P@draigBrady.com>
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
 
 	version 8.25
 	* NEWS: Record release date.

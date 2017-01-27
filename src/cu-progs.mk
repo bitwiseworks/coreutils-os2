@@ -17,6 +17,7 @@ build_if_possible__progs += src/users
 build_if_possible__progs += src/who
 default__progs =
 default__progs += src/[
+default__progs += src/b2sum
 default__progs += src/base64
 default__progs += src/base32
 default__progs += src/basename

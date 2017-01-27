@@ -21,6 +21,7 @@
 
 #include "system.h"
 #include "c-strtod.h"
+#include "die.h"
 #include "error.h"
 #include "long-options.h"
 #include "quote.h"
@@ -124,7 +125,7 @@ main (int argc, char **argv)
     {
       double s;
       const char *p;
-      if (! xstrtod (argv[i], &p, &s, c_strtod)
+      if (! (xstrtod (argv[i], &p, &s, c_strtod) || errno == ERANGE)
           /* Nonnegative interval.  */
           || ! (0 <= s)
           /* No extra chars after the number and an optional s,m,h,d char.  */
@@ -143,7 +144,7 @@ main (int argc, char **argv)
     usage (EXIT_FAILURE);
 
   if (xnanosleep (seconds))
-    error (EXIT_FAILURE, errno, _("cannot read realtime clock"));
+    die (EXIT_FAILURE, errno, _("cannot read realtime clock"));
 
   return EXIT_SUCCESS;
 }
