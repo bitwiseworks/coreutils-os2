@@ -24,7 +24,6 @@
 #include <fnmatch.h>
 
 #include "exclude.h"
-#include "progname.h"
 #include "error.h"
 #include "argmatch.h"
 
@@ -75,8 +74,6 @@ main (int argc, char **argv)
   int exclude_options = 0;
   struct exclude *exclude = new_exclude ();
 
-  set_program_name (argv[0]);
-
   if (argc == 1)
     error (1, 0, "usage: %s file -- words...", argv[0]);
 
@@ -125,5 +122,7 @@ main (int argc, char **argv)
 
       printf ("%s: %d\n", word, excluded_file_name (exclude, word));
     }
+
+  free_exclude (exclude);
   return 0;
 }

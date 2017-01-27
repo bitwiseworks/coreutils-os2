@@ -37,6 +37,7 @@
 @dircategory Individual utilities
 @direntry
 * arch: (coreutils)arch invocation.             Print machine hardware name.
+* b2sum: (coreutils)b2sum invocation.           Print or check BLAKE2 digests.
 * base32: (coreutils)base32 invocation.         Base32 encode/decode data.
 * base64: (coreutils)base64 invocation.         Base64 encode/decode data.
 * basename: (coreutils)basename invocation.     Strip directory and suffix.
@@ -186,7 +187,7 @@ Free Documentation License''.
 * Output of entire files::       cat tac nl od base32 base64
 * Formatting file contents::     fmt pr fold
 * Output of parts of files::     head tail split csplit
-* Summarizing files::            wc sum cksum md5sum sha1sum sha2
+* Summarizing files::            wc sum cksum b2sum md5sum sha1sum sha2
 * Operating on sorted files::    sort shuf uniq comm ptx tsort
 * Operating on fields::          cut paste join
 * Operating on characters::      tr expand unexpand
@@ -259,6 +260,7 @@ Summarizing files
 * wc invocation::                Print newline, word, and byte counts
 * sum invocation::               Print checksum and block counts
 * cksum invocation::             Print CRC checksum and byte counts
+* b2sum invocation::             Print or check BLAKE2 digests
 * md5sum invocation::            Print or check MD5 digests
 * sha1sum invocation::           Print or check SHA-1 digests
 * sha2 utilities::               Print or check SHA-2 digests
@@ -521,8 +523,8 @@ Include the version number, machine architecture, input files, and
 any other information needed to reproduce the bug: your input, what you
 expected, what you got, and why it is wrong.
 
-If you have a problem with @command{sort}, try running @samp{sort
---debug}, as it can can often help find and fix problems without
+If you have a problem with @command{sort} or @command{date}, try using the
+@option{--debug} option, as it can can often help find and fix problems without
 having to wait for an answer to a bug report.  If the debug output
 does not suffice to fix the problem on your own, please compress and
 attach it to the rest of your bug report.
@@ -1506,10 +1508,11 @@ probably do not need to define @env{POSIXLY_CORRECT}.
 Newer versions of POSIX are occasionally incompatible with older
 versions.  For example, older versions of POSIX required the
 command @samp{sort +1} to sort based on the second and succeeding
-fields in each input line, but starting with POSIX 1003.1-2001
+fields in each input line, but in POSIX 1003.1-2001
 the same command is required to sort the file named @file{+1}, and you
 must instead use the command @samp{sort -k 2} to get the field-based
-sort.
+sort.  To complicate things further, POSIX 1003.1-2008 allows an
+implementation to have either the old or the new behavior.
 
 @vindex _POSIX2_VERSION
 The GNU utilities normally conform to the version of POSIX
@@ -1520,10 +1523,10 @@ the year and month the standard was adopted.  Three values are currently
 supported for @env{_POSIX2_VERSION}: @samp{199209} stands for
 POSIX 1003.2-1992, @samp{200112} stands for POSIX
 1003.1-2001, and @samp{200809} stands for POSIX 1003.1-2008.
-For example, if you have a newer system but are running software
-that assumes an older version of POSIX and uses @samp{sort +1}
-or @samp{tail +10}, you can work around any compatibility problems by setting
-@samp{_POSIX2_VERSION=199209} in your environment.
+For example, if you have a POSIX 1003.1-2001 system but are running software
+containing traditional usage like @samp{sort +1} or @samp{tail +10},
+you can work around the compatibility problems by setting
+@samp{_POSIX2_VERSION=200809} in your environment.
 
 @c This node is named "Multi-call invocation", not the usual
 @c "coreutils invocation", so that shell commands like
@@ -1740,10 +1743,10 @@ nl [@var{option}]@dots{} [@var{file}]@dots{}
 @end example
 
 @cindex logical pages, numbering on
-@command{nl} decomposes its input into (logical) pages; by default, the
-line number is reset to 1 at the top of each logical page.  @command{nl}
-treats all of the input files as a single document; it does not reset
-line numbers or logical pages between files.
+@command{nl} decomposes its input into (logical) page sections;
+by default, the line number is reset to 1 at each logical page section.
+@command{nl} treats all of the input files as a single document;
+it does not reset line numbers or logical pages between files.
 
 @cindex headers, numbering
 @cindex body, numbering
@@ -3060,17 +3063,18 @@ by 512-byte blocks, bytes, or lines, optionally followed by @samp{f}
 which has the same meaning as @option{-f}.
 
 @vindex _POSIX2_VERSION
-On older systems, the leading @samp{-} can be replaced by @samp{+} in
-the obsolete option syntax with the same meaning as in counts, and
-obsolete usage overrides normal usage when the two conflict.
-This obsolete behavior can be enabled or disabled with the
+On systems not conforming to POSIX 1003.1-2001, the leading @samp{-}
+can be replaced by @samp{+} in the traditional option syntax with the
+same meaning as in counts, and on obsolete systems predating POSIX
+1003.1-2001 traditional usage overrides normal usage when the two
+conflict.  This behavior can be controlled with the
 @env{_POSIX2_VERSION} environment variable (@pxref{Standards
 conformance}).
 
-Scripts intended for use on standard hosts should avoid obsolete
+Scripts intended for use on standard hosts should avoid traditional
 syntax and should use @option{-c @var{num}[b]}, @option{-n
 @var{num}}, and/or @option{-f} instead.  If your script must also
-run on hosts that support only the obsolete syntax, you can often
+run on hosts that support only the traditional syntax, you can often
 rewrite it to avoid problematic usages, e.g., by using @samp{sed -n
 '$p'} rather than @samp{tail -1}.  If that's not possible, the script
 can use a test like @samp{if tail -c +1 </dev/null >/dev/null 2>&1;
@@ -3555,6 +3559,7 @@ contents of files.
 * wc invocation::               Print newline, word, and byte counts.
 * sum invocation::              Print checksum and block counts.
 * cksum invocation::            Print CRC checksum and byte counts.
+* b2sum invocation::            Print or check BLAKE2 digests.
 * md5sum invocation::           Print or check MD5 digests.
 * sha1sum invocation::          Print or check SHA-1 digests.
 * sha2 utilities::              Print or check SHA-2 digests.
@@ -3766,6 +3771,33 @@ options}.
 
 @exitstatus
 
+
+@node b2sum invocation
+@section @command{b2sum}: Print or check BLAKE2 digests
+
+@pindex b2sum
+@cindex BLAKE2
+@cindex 512-bit checksum
+@cindex checksum, 512-bit
+@cindex fingerprint, 512-bit
+@cindex message-digest, 512-bit
+
+@command{b2sum} computes a 512-bit checksum for each specified
+@var{file}.  The same usage and options as the @command{md5sum}
+command are supported.  @xref{md5sum invocation}.
+In addition @command{b2sum} supports the following options.
+
+@table @samp
+@item -l
+@itemx --length
+@opindex -l
+@opindex --length
+@cindex BLAKE2 hash length
+Change (shorten) the default digest length.
+This is specified in bits and thus must be a multiple of 8.
+This option is ignored when @option{--check} is specified,
+as the length is automatically determined when checking.
+@end table
 
 @node md5sum invocation
 @section @command{md5sum}: Print or check MD5 digests
@@ -4020,7 +4052,7 @@ sort [@var{option}]@dots{} [@var{file}]@dots{}
 Many options affect how @command{sort} compares lines; if the results
 are unexpected, try the @option{--debug} option to see what happened.
 A pair of lines is compared as follows:
-@command{sort} compares each pair of fields, in the
+@command{sort} compares each pair of fields (see @option{--key}), in the
 order specified on the command line, according to the associated
 ordering options, until a difference is found or no fields are left.
 If no key fields are specified, @command{sort} uses a default key of
@@ -4330,7 +4362,14 @@ Specify a sort field that consists of the part of the line between
 @var{pos1} and @var{pos2} (or the end of the line, if @var{pos2} is
 omitted), @emph{inclusive}.
 
-Each @var{pos} has the form @samp{@var{f}[.@var{c}][@var{opts}]},
+In its simplest form @var{pos} specifies a field number (starting with 1),
+with fields being separated by runs of blank characters, and by default
+those blanks being included in the comparison at the start of each field.
+To adjust the handling of blank characters see the @option{-b} and
+@option{-t} options.
+
+More generally,
+each @var{pos} has the form @samp{@var{f}[.@var{c}][@var{opts}]},
 where @var{f} is the number of the field to use, and @var{c} is the number
 of the first character from the beginning of the field.  Fields and character
 positions are numbered starting with 1; a character position of zero in
@@ -4384,9 +4423,12 @@ silently uses a smaller value.
 @cindex overwriting of input, allowed
 Write output to @var{output-file} instead of standard output.
 Normally, @command{sort} reads all input before opening
-@var{output-file}, so you can safely sort a file in place by using
+@var{output-file}, so you can sort a file in place by using
 commands like @code{sort -o F F} and @code{cat F | sort -o F}@.
-However, @command{sort} with @option{--merge} (@option{-m}) can open
+However, it is often safer to output to an otherwise-unused file, as
+data may be lost if the system crashes or @command{sort} encounters
+an I/O or other serious error while a file is being sorted in place.
+Also, @command{sort} with @option{--merge} (@option{-m}) can open
 the output file before reading all input, so a command like @code{cat
 F | sort -m -o F - G} is not safe as @command{sort} might start
 writing @file{F} before @command{cat} is done reading it.
@@ -4533,23 +4575,24 @@ is counted from the first nonblank character of the field.
 
 @vindex _POSIX2_VERSION
 @vindex POSIXLY_CORRECT
-On older systems, @command{sort} supports an obsolete origin-zero
+On systems not conforming to POSIX 1003.1-2001,
+@command{sort} supports a traditional origin-zero
 syntax @samp{+@var{pos1} [-@var{pos2}]} for specifying sort keys.
-The obsolete sequence @samp{sort +@var{a}.@var{x} -@var{b}.@var{y}}
+The traditional command @samp{sort +@var{a}.@var{x} -@var{b}.@var{y}}
 is equivalent to @samp{sort -k @var{a+1}.@var{x+1},@var{b}} if @var{y}
 is @samp{0} or absent, otherwise it is equivalent to @samp{sort -k
 @var{a+1}.@var{x+1},@var{b+1}.@var{y}}.
 
-This obsolete behavior can be enabled or disabled with the
+This traditional behavior can be controlled with the
 @env{_POSIX2_VERSION} environment variable (@pxref{Standards
 conformance}); it can also be enabled when @env{POSIXLY_CORRECT} is
-not set by using the obsolete syntax with @samp{-@var{pos2}} present.
+not set by using the traditional syntax with @samp{-@var{pos2}} present.
 
-Scripts intended for use on standard hosts should avoid obsolete
+Scripts intended for use on standard hosts should avoid traditional
 syntax and should use @option{-k} instead.  For example, avoid
 @samp{sort +2}, since it might be interpreted as either @samp{sort
 ./+2} or @samp{sort -k 3}.  If your script must also run on hosts that
-support only the obsolete syntax, it can use a test like @samp{if sort
+support only the traditional syntax, it can use a test like @samp{if sort
 -k 1 </dev/null >/dev/null 2>&1; then @dots{}} to decide which syntax
 to use.
 
@@ -4908,7 +4951,7 @@ a null string for comparison if a line has fewer than @var{n} fields.  Fields
 are sequences of non-space non-tab characters that are separated from
 each other by at least one space or tab.
 
-For compatibility @command{uniq} supports an obsolete option syntax
+For compatibility @command{uniq} supports a traditional option syntax
 @option{-@var{n}}.  New scripts should use @option{-f @var{n}} instead.
 
 @item -s @var{n}
@@ -4920,11 +4963,12 @@ for comparison if a line has fewer than @var{n} characters.  If you use both
 the field and character skipping options, fields are skipped over first.
 
 @vindex _POSIX2_VERSION
-On older systems, @command{uniq} supports an obsolete option syntax
+On systems not conforming to POSIX 1003.1-2001,
+@command{uniq} supports a traditional option syntax
 @option{+@var{n}}.
-This obsolete behavior can be enabled or disabled with the
+Although this traditional behavior can be controlled with the
 @env{_POSIX2_VERSION} environment variable (@pxref{Standards
-conformance}), but portable scripts should avoid commands whose
+conformance}), portable scripts should avoid commands whose
 behavior depends on this variable.
 For example, use @samp{uniq ./+10} or @samp{uniq -s 10} rather than
 the ambiguous @samp{uniq +10}.
@@ -5129,6 +5173,37 @@ Print @var{str} between adjacent output columns,
 rather than the default of a single TAB character.
 
 The delimiter @var{str} may not be empty.
+
+@item --total
+Output a summary at the end.
+
+Similar to the regular output,
+column one contains the total number of lines unique to @var{file1},
+column two contains the total number of lines unique to @var{file2}, and
+column three contains the total number of lines common to both files,
+followed by the word @samp{total} in the additional column four.
+
+In the following example, @command{comm} omits the regular output
+(@option{-123}), thus just printing the summary:
+
+@example
+$ printf '%s\n' a b c d e     > file1
+$ printf '%s\n'   b c d e f g > file2
+$ comm --total -123 file1 file2
+1       2       4       total
+@end example
+
+This option is a GNU extension.  Portable scripts should use @command{wc} to
+get the totals, e.g. for the above example files:
+
+@example
+$ comm -23 file1 file2 | wc -l    # number of lines only in file1
+1
+$ comm -13 file1 file2 | wc -l    # number of lines only in file2
+2
+$ comm -12 file1 file2 | wc -l    # number of lines common to both files
+4
+@end example
 
 @optZeroTerminated
 
@@ -5850,8 +5925,9 @@ line that contains no delimiter character, unless the
 @option{--only-delimited} (@option{-s}) option is specified.
 
 Note @command{awk} supports more sophisticated field processing,
-and by default will use (and discard) runs of blank characters to
-separate fields, and ignore leading and trailing blanks.
+like reordering fields, and handling fields aligned with blank characters.
+By default @command{awk} uses (and discards) runs of blank characters
+to separate fields, and ignores leading and trailing blanks.
 @example
 @verbatim
 awk '{print $2}'    # print the second field
@@ -5859,6 +5935,8 @@ awk '{print $NF-1}' # print the penultimate field
 awk '{print $2,$1}' # reorder the first two fields
 @end verbatim
 @end example
+Note while @command{cut} accepts field specifications in
+arbitrary order, output is always in the order encountered in the file.
 
 In the unlikely event that @command{awk} is unavailable,
 one can use the @command{join} command, to process blank
@@ -7710,6 +7788,7 @@ Use style @var{word} to quote file names and other strings that may
 contain arbitrary characters.  The @var{word} should
 be one of the following:
 
+@macro quotingStyles
 @table @samp
 @item literal
 Output strings as-is; this is the same as the @option{-N} or
@@ -7747,6 +7826,8 @@ surrounding quotation marks appropriate for the locale, and quote
 @t{'like this'} instead of @t{"like
 this"} in the default C locale.  This looks nicer on many displays.
 @end table
+@end macro
+@quotingStyles
 
 You can specify the default value of the @option{--quoting-style} option
 with the environment variable @env{QUOTING_STYLE}@.  If that environment
@@ -9203,7 +9284,7 @@ Print the name of each file before moving it.
 @cindex security context
 This option functions similarly to the @command{restorecon} command,
 by adjusting the SELinux security context according
-to the system default type for destination files.
+to the system default type for destination files and each created directory.
 
 @end table
 
@@ -10223,7 +10304,7 @@ Print a warning if specified along with multiple @var{file}s.
 @opindex -q
 @opindex --silent
 @opindex --quiet
-Suppress most error messages.
+Suppress most error messages.  On by default.
 
 @item -v
 @itemx --verbose
@@ -10978,7 +11059,8 @@ On the atypical systems that support leap seconds, @var{ss} may be
 @end table
 
 @vindex _POSIX2_VERSION
-On older systems, @command{touch} supports an obsolete syntax, as follows.
+On systems predating POSIX 1003.1-2001,
+@command{touch} supports an obsolete syntax, as follows.
 If no timestamp is given with any of the @option{-d}, @option{-r}, or
 @option{-t} options, and if there are two or more @var{file}s and the
 first @var{file} is of the form @samp{@var{mmddhhmm}[@var{yy}]} and this
@@ -10986,9 +11068,9 @@ would be a valid argument to the @option{-t} option (if the @var{yy}, if
 any, were moved to the front), and if the represented year
 is in the range 1969--1999, that argument is interpreted as the time
 for the other files instead of as a file name.
-This obsolete behavior can be enabled or disabled with the
+Although this obsolete behavior can be controlled with the
 @env{_POSIX2_VERSION} environment variable (@pxref{Standards
-conformance}), but portable scripts should avoid commands whose
+conformance}), portable scripts should avoid commands whose
 behavior depends on this variable.
 For example, use @samp{touch ./12312359 main.c} or @samp{touch -t
 12312359 main.c} rather than the ambiguous @samp{touch 12312359 main.c}.
@@ -11760,7 +11842,7 @@ The valid @var{format} directives for files with @option{--format} and
 @item %i - Inode number
 @item %m - Mount point (See note below)
 @item %n - File name
-@item %N - Quoted file name with dereference if symbolic link
+@item %N - Quoted file name with dereference if symbolic link (see below)
 @item %o - Optimal I/O transfer size hint
 @item %s - Total size, in bytes
 @item %t - Major device type in hex (see below)
@@ -11781,6 +11863,11 @@ The @samp{%a} format prints the octal mode, and so it is useful
 to control the zero padding of the output with the @samp{#} and @samp{0}
 printf flags. For example to pad to at least 3 wide while making larger
 numbers unambiguously octal, you can use @samp{%#03a}.
+
+The @samp{%N} format can be set with the environment variable
+@env{QUOTING_STYLE}@.  If that environment variable is not set,
+the default value is @samp{shell-escape}.  Valid quoting styles are:
+@quotingStyles
 
 The @samp{%t} and @samp{%T} formats operate on the st_rdev member of
 the stat(2) structure, and are only defined for character and block
@@ -15181,6 +15268,8 @@ same as @samp{%b}
 day of year (@samp{001}@dots{}@samp{366})
 @item %m
 month (@samp{01}@dots{}@samp{12})
+@item %q
+quarter of year (@samp{1}@dots{}@samp{4})
 @item %u
 day of week (@samp{1}@dots{}@samp{7}) with @samp{1} corresponding to Monday
 @item %U
@@ -15377,6 +15466,14 @@ date -d "$(LC_TIME=C date)"
 @end example
 @xref{Date input formats}.
 
+@item --debug
+@opindex --debug
+@cindex debugging date strings
+@cindex date strings, debugging
+@cindex arbitrary date strings, debugging
+annotate the parsed date, display the effective time zone, and warn about
+potential misuse.
+
 @item -f @var{datefile}
 @itemx --file=@var{datefile}
 @opindex -f
@@ -15557,7 +15654,7 @@ of the month, you can use the (GNU extension)
 the padding altogether:
 
 @example
-date -d 1may '+%B %-d
+date -d 1may '+%B %-d'
 @end example
 
 @item
@@ -17414,6 +17511,9 @@ even when @var{first} is larger than @var{last}.
 The sequence of numbers ends when the sum of the current number and
 @var{increment} would become greater than @var{last},
 so @code{seq 1 10 10} only produces @samp{1}.
+@var{increment} must not be @samp{0}; use @command{yes} to get
+repeated output of a constant number.
+@var{first}, @var{increment} and @var{last} must not be @code{NaN}.
 Floating-point numbers may be specified.  @xref{Floating point}.
 
 The program accepts the following options.  Also see @ref{Common options}.

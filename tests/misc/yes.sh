@@ -19,6 +19,9 @@
 . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
 print_ver_ yes
 
+# Check basic operation
+test "$(yes | head -n1)" = 'y' || fail=1
+
 # Check various single item sizes, with the most important
 # size being BUFSIZ used for the local buffer to yes(1).
 # Note a \n is added, so actual sizes required internally
@@ -30,13 +33,26 @@ for size in 1 1999 4095 4096 8191 8192 16383 16384; do
 done
 
 # Check the many small items case,
-# both fitting and overflowing the internal buffer
-external=env
-if external true $(seq 4000); then
+# both fitting and overflowing the internal buffer.
+# First check that 4000 arguments supported.
+if test 4000 -eq $(sh -c 'echo $#' 0 $(seq 4000)); then
   for i in 100 4000; do
     seq $i | paste -s -d ' ' | sed p > out.1
     yes $(seq $i) | head -n2 > out.2
     compare out.1 out.2 || fail=1
+  done
+fi
+
+# Check a single appropriate diagnostic is output on write error
+if test -w /dev/full && test -c /dev/full; then
+  # The single output diagnostic expected,
+  # (without the possibly varying :strerror(ENOSPC) suffix).
+  printf '%s\n' "yes: standard output" > exp
+
+  for size in 1 16384; do
+    returns_ 1 yes "$(printf %${size}s '')" >/dev/full 2>errt
+    sed 's/\(yes:.*\):.*/\1/' errt > err
+    compare exp err || fail=1
   done
 fi
 

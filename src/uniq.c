@@ -24,6 +24,7 @@
 #include "system.h"
 #include "argmatch.h"
 #include "linebuffer.h"
+#include "die.h"
 #include "error.h"
 #include "fadvise.h"
 #include "hard-locale.h"
@@ -226,6 +227,13 @@ Also, comparisons honor the rules specified by 'LC_COLLATE'.\n\
   exit (status);
 }
 
+static bool
+strict_posix2 (void)
+{
+  int posix_ver = posix2_version ();
+  return 200112 <= posix_ver && posix_ver < 200809;
+}
+
 /* Convert OPT to size_t, reporting an error using MSGID if OPT is
    invalid.  Silently convert too-large values to SIZE_MAX.  */
 
@@ -242,7 +250,7 @@ size_opt (char const *opt, char const *msgid)
       break;
 
     default:
-      error (EXIT_FAILURE, 0, "%s: %s", opt, _(msgid));
+      die (EXIT_FAILURE, 0, "%s: %s", opt, _(msgid));
     }
 
   return MIN (size, SIZE_MAX);
@@ -327,9 +335,9 @@ check_file (const char *infile, const char *outfile, char delimiter)
   struct linebuffer *thisline, *prevline;
 
   if (! (STREQ (infile, "-") || freopen (infile, "r", stdin)))
-    error (EXIT_FAILURE, errno, "%s", quotef (infile));
+    die (EXIT_FAILURE, errno, "%s", quotef (infile));
   if (! (STREQ (outfile, "-") || freopen (outfile, "w", stdout)))
-    error (EXIT_FAILURE, errno, "%s", quotef (outfile));
+    die (EXIT_FAILURE, errno, "%s", quotef (outfile));
 
   fadvise (stdin, FADVISE_SEQUENTIAL);
 
@@ -426,7 +434,7 @@ check_file (const char *infile, const char *outfile, char delimiter)
           if (match_count == UINTMAX_MAX)
             {
               if (count_occurrences)
-                error (EXIT_FAILURE, 0, _("too many repeated lines"));
+                die (EXIT_FAILURE, 0, _("too many repeated lines"));
               match_count--;
             }
 
@@ -462,7 +470,7 @@ check_file (const char *infile, const char *outfile, char delimiter)
 
  closefiles:
   if (ferror (stdin) || fclose (stdin) != 0)
-    error (EXIT_FAILURE, 0, _("error reading %s"), quoteaf (infile));
+    die (EXIT_FAILURE, 0, _("error reading %s"), quoteaf (infile));
 
   /* stdout is handled via the atexit-invoked close_stdout function.  */
 
@@ -533,7 +541,7 @@ main (int argc, char **argv)
           {
             unsigned long int size;
             if (optarg[0] == '+'
-                && posix2_version () < 200112
+                && ! strict_posix2 ()
                 && xstrtoul (optarg, NULL, 10, &size, "") == LONGINT_OK
                 && size <= SIZE_MAX)
               skip_chars = size;

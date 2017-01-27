@@ -223,6 +223,7 @@ all_tests =					\
   tests/rm/unreadable.pl			\
   tests/rm/v-slash.sh				\
   tests/rm/many-dir-entries-vs-OOM.sh		\
+  tests/rm/rm-readdir-fail.sh			\
   tests/chgrp/default-no-deref.sh		\
   tests/chgrp/deref.sh				\
   tests/chgrp/no-x.sh				\
@@ -235,6 +236,8 @@ all_tests =					\
   tests/misc/ptx.pl				\
   tests/misc/test.pl				\
   tests/misc/seq.pl				\
+  tests/misc/seq-epipe.sh			\
+  tests/misc/seq-io-errors.sh			\
   tests/misc/seq-long-double.sh			\
   tests/misc/seq-precision.sh			\
   tests/misc/head.pl				\
@@ -276,6 +279,7 @@ all_tests =					\
   tests/misc/csplit-heap.sh			\
   tests/misc/csplit-io-err.sh			\
   tests/misc/csplit-suppress-matched.pl		\
+  tests/misc/date-debug.sh			\
   tests/misc/date-sec.sh			\
   tests/misc/dircolors.pl			\
   tests/misc/dirname.pl				\
@@ -292,6 +296,7 @@ all_tests =					\
   tests/misc/head-pos.sh			\
   tests/misc/head-write-error.sh		\
   tests/misc/kill.sh				\
+  tests/misc/b2sum.sh				\
   tests/misc/md5sum.pl				\
   tests/misc/md5sum-bsd.sh			\
   tests/misc/md5sum-newline.pl			\
@@ -333,6 +338,7 @@ all_tests =					\
   tests/misc/shred-size.sh			\
   tests/misc/shuf.sh				\
   tests/misc/shuf-reservoir.sh			\
+  tests/misc/sleep.sh				\
   tests/misc/sort.pl				\
   tests/misc/sort-benchmark-random.sh		\
   tests/misc/sort-compress.sh			\
@@ -344,6 +350,7 @@ all_tests =					\
   tests/misc/sort-discrim.sh			\
   tests/misc/sort-files0-from.pl		\
   tests/misc/sort-float.sh			\
+  tests/misc/sort-h-thousands-sep.sh		\
   tests/misc/sort-merge.pl			\
   tests/misc/sort-merge-fdlimit.sh		\
   tests/misc/sort-month.sh			\
@@ -390,6 +397,7 @@ all_tests =					\
   tests/misc/tail.pl				\
   tests/misc/tee.sh				\
   tests/misc/test-diag.pl			\
+  tests/misc/time-style.sh			\
   tests/misc/timeout.sh				\
   tests/misc/timeout-blocked.pl			\
   tests/misc/timeout-group.sh			\
@@ -545,6 +553,7 @@ all_tests =					\
   tests/install/d-slashdot.sh			\
   tests/install/install-C.sh			\
   tests/install/install-C-selinux.sh		\
+  tests/install/install-Z-selinux.sh		\
   tests/install/strip-program.sh		\
   tests/install/trap.sh				\
   tests/ln/backup-1.sh				\
@@ -575,6 +584,7 @@ all_tests =					\
   tests/ls/no-arg.sh				\
   tests/ls/no-cap.sh				\
   tests/ls/proc-selinux-segfault.sh		\
+  tests/ls/quote-align.sh			\
   tests/ls/readdir-mountpoint-inode.sh		\
   tests/ls/recursive.sh				\
   tests/ls/root-rel-symlink-color.sh		\

@@ -302,7 +302,8 @@ AC_DEFUN([gl_EARLY],
   # Code from module getopt-posix-tests:
   # Code from module getpagesize:
   # Code from module getpass-gnu:
-  # Code from module gettext:
+  # Code from module getprogname:
+  # Code from module getprogname-tests:
   # Code from module gettext-h:
   # Code from module gettime:
   # Code from module gettimeofday:
@@ -376,6 +377,8 @@ AC_DEFUN([gl_EARLY],
   # Code from module lchown-tests:
   # Code from module ldtoastr:
   # Code from module lib-ignore:
+  # Code from module limits-h:
+  # Code from module limits-h-tests:
   # Code from module linebuffer:
   # Code from module link:
   # Code from module link-follow:
@@ -1233,6 +1236,7 @@ AC_DEFUN([gl_INIT],
     AC_LIBOBJ([getpass])
     gl_PREREQ_GETPASS
   fi
+  gl_FUNC_GETPROGNAME
   AC_SUBST([LIBINTL])
   AC_SUBST([LTLIBINTL])
   gl_GETTIME
@@ -1344,6 +1348,7 @@ AC_DEFUN([gl_INIT],
   gl_UNISTD_MODULE_INDICATOR([lchown])
   AC_REQUIRE([gl_C99_STRTOLD])
   gl_IGNORE_UNUSED_LIBRARIES
+  gl_LIMITS_H
   gl_FUNC_LINK
   if test $HAVE_LINK = 0 || test $REPLACE_LINK = 1; then
     AC_LIBOBJ([link])
@@ -1520,6 +1525,9 @@ AC_DEFUN([gl_INIT],
   dnl Run our hack near the end, just before config.status creation.
   dnl It must happen late, i.e., after gl_LIBOBJS has been finalized.
   AC_CONFIG_COMMANDS_PRE([
+    dnl Note we can't currently pass $gl_source_base instead of 'lib',
+    dnl because $gl_source_base is unset or the wrong value in the references
+    dnl generated in m4/non-recursive-gnulib-prefix-hack.m4
     gl_NON_RECURSIVE_GNULIB_PREFIX_HACK([lib])
     ])
   gl_NPROC
@@ -2081,8 +2089,6 @@ changequote([, ])dnl
   gl_FUNC_UNGETC_WORKS
   gl_FUNC_UNGETC_WORKS
   AC_CHECK_FUNCS_ONCE([ttyname])
-  dnl you must add AM_GNU_GETTEXT([external]) or similar to configure.ac.
-  AM_GNU_GETTEXT_VERSION([0.18.1])
   AC_C_BIGENDIAN
   gl_FUNC_INET_PTON
   if test $HAVE_INET_PTON = 0 || test $REPLACE_INET_NTOP = 1; then
@@ -2490,6 +2496,7 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/filenamecat.h
   lib/filevercmp.c
   lib/filevercmp.h
+  lib/flexmember.h
   lib/float+.h
   lib/float.c
   lib/float.in.h
@@ -2562,6 +2569,8 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/getpagesize.c
   lib/getpass.c
   lib/getpass.h
+  lib/getprogname.c
+  lib/getprogname.h
   lib/gettext.h
   lib/gettime.c
   lib/gettimeofday.c
@@ -2625,6 +2634,7 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/langinfo.in.h
   lib/lchown.c
   lib/ldtoastr.c
+  lib/limits.in.h
   lib/linebuffer.c
   lib/linebuffer.h
   lib/link.c
@@ -3122,13 +3132,12 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/getopt.m4
   m4/getpagesize.m4
   m4/getpass.m4
-  m4/gettext.m4
+  m4/getprogname.m4
   m4/gettime.m4
   m4/gettimeofday.m4
   m4/getugroups.m4
   m4/getusershell.m4
   m4/gl-openssl.m4
-  m4/glibc2.m4
   m4/glibc21.m4
   m4/gnu-make.m4
   m4/gnulib-common.m4
@@ -3146,11 +3155,7 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/inet_ntop.m4
   m4/inet_pton.m4
   m4/inline.m4
-  m4/intdiv0.m4
-  m4/intl.m4
-  m4/intldir.m4
   m4/intlmacosx.m4
-  m4/intmax.m4
   m4/intmax_t.m4
   m4/inttostr.m4
   m4/inttypes-pri.m4
@@ -3178,6 +3183,7 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/lib-link.m4
   m4/lib-prefix.m4
   m4/libunistring-base.m4
+  m4/limits-h.m4
   m4/link-follow.m4
   m4/link.m4
   m4/linkat.m4
@@ -3234,7 +3240,6 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/netdb_h.m4
   m4/netinet_in_h.m4
   m4/nl_langinfo.m4
-  m4/nls.m4
   m4/nocrash.m4
   m4/non-recursive-gnulib-prefix-hack.m4
   m4/nproc.m4
@@ -3249,16 +3254,13 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/perror.m4
   m4/physmem.m4
   m4/pipe.m4
-  m4/po.m4
   m4/posix-shell.m4
   m4/posixtm.m4
   m4/posixver.m4
   m4/printf-frexp.m4
   m4/printf-frexpl.m4
-  m4/printf-posix.m4
   m4/printf.m4
   m4/priv-set.m4
-  m4/progtest.m4
   m4/pthread.m4
   m4/putenv.m4
   m4/quote.m4
@@ -3364,7 +3366,6 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/tls.m4
   m4/tm_gmtoff.m4
   m4/tzset.m4
-  m4/uintmax_t.m4
   m4/uname.m4
   m4/ungetc.m4
   m4/unicodeio.m4
@@ -3387,7 +3388,6 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/vasprintf.m4
   m4/version-etc.m4
   m4/vfprintf-posix.m4
-  m4/visibility.m4
   m4/vprintf-posix.m4
   m4/warn-on-use.m4
   m4/warnings.m4
@@ -3569,6 +3569,7 @@ AC_DEFUN([gl_FILE_LIST], [
   tests/test-getopt.c
   tests/test-getopt.h
   tests/test-getopt_long.h
+  tests/test-getprogname.c
   tests/test-gettimeofday.c
   tests/test-hash.c
   tests/test-i-ring.c
@@ -3595,6 +3596,7 @@ AC_DEFUN([gl_FILE_LIST], [
   tests/test-langinfo.c
   tests/test-lchown.c
   tests/test-lchown.h
+  tests/test-limits-h.c
   tests/test-link.c
   tests/test-link.h
   tests/test-linkat.c
@@ -3622,6 +3624,7 @@ AC_DEFUN([gl_FILE_LIST], [
   tests/test-mbrtowc2.sh
   tests/test-mbrtowc3.sh
   tests/test-mbrtowc4.sh
+  tests/test-mbrtowc5.sh
   tests/test-mbsalign.c
   tests/test-mbscasecmp.c
   tests/test-mbscasecmp.sh

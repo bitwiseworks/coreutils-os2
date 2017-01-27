@@ -20,3 +20,10 @@
 #include <time.h>
 
 bool parse_datetime (struct timespec *, char const *, struct timespec const *);
+
+/* parse_datetime2 flag: if set, print debug/progress information to STDERR */
+#define PARSE_DATETIME_DEBUG 1
+
+/* same as above, supporting additional flags */
+bool parse_datetime2 (struct timespec *, char const *, struct timespec const *,
+                      unsigned int flags);

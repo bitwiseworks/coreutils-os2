@@ -55,6 +55,7 @@
 #include <assert.h>
 
 #include "system.h"
+#include "die.h"
 #include "error.h"
 #include "fd-reopen.h"
 #include "quote.h"
@@ -118,9 +119,9 @@
 # define CSWTCH _POSIX_VDISABLE
 #endif
 
-/* SunOS 5.3 loses (^Z doesn't work) if 'swtch' is the same as 'susp'.
+/* SunOS >= 5.3 loses (^Z doesn't work) if 'swtch' is the same as 'susp'.
    So the default is to disable 'swtch.'  */
-#if defined __sparc__ && defined __svr4__
+#if defined __sun
 # undef CSWTCH
 # define CSWTCH _POSIX_VDISABLE
 #endif
@@ -953,8 +954,6 @@ Combination settings:\n\
 #endif
 );
       fputs (_("\
-"), stdout);
-      fputs (_("\
    oddp          same as parenb parodd cs7\n\
    -oddp         same as -parenb cs8\n\
    [-]parity     same as [-]evenp\n\
@@ -1138,7 +1137,7 @@ main (int argc, char **argv)
 
         case 'F':
           if (file_name)
-            error (EXIT_FAILURE, 0, _("only one device may be specified"));
+            die (EXIT_FAILURE, 0, _("only one device may be specified"));
           file_name = optarg;
           break;
 
@@ -1171,14 +1170,14 @@ main (int argc, char **argv)
 
   /* Specifying both -a and -g gets an error.  */
   if (verbose_output && recoverable_output)
-    error (EXIT_FAILURE, 0,
-           _("the options for verbose and stty-readable output styles are\n"
-             "mutually exclusive"));
+    die (EXIT_FAILURE, 0,
+         _("the options for verbose and stty-readable output styles are\n"
+           "mutually exclusive"));
 
   /* Specifying any other arguments with -a or -g gets an error.  */
   if (!noargs && (verbose_output || recoverable_output))
-    error (EXIT_FAILURE, 0,
-           _("when specifying an output style, modes may not be set"));
+    die (EXIT_FAILURE, 0,
+         _("when specifying an output style, modes may not be set"));
 
   /* FIXME: it'd be better not to open the file until we've verified
      that all arguments are valid.  Otherwise, we could end up doing
@@ -1190,17 +1189,17 @@ main (int argc, char **argv)
       int fdflags;
       device_name = file_name;
       if (fd_reopen (STDIN_FILENO, device_name, O_RDONLY | O_NONBLOCK, 0) < 0)
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
       if ((fdflags = fcntl (STDIN_FILENO, F_GETFL)) == -1
           || fcntl (STDIN_FILENO, F_SETFL, fdflags & ~O_NONBLOCK) < 0)
-        error (EXIT_FAILURE, errno, _("%s: couldn't reset non-blocking mode"),
-               quotef (device_name));
+        die (EXIT_FAILURE, errno, _("%s: couldn't reset non-blocking mode"),
+             quotef (device_name));
     }
   else
     device_name = _("standard input");
 
   if (tcgetattr (STDIN_FILENO, &mode))
-    error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+    die (EXIT_FAILURE, errno, "%s", quotef (device_name));
 
   if (verbose_output || recoverable_output || noargs)
     {
@@ -1306,8 +1305,8 @@ main (int argc, char **argv)
 
               if (ioctl (STDIN_FILENO, TIOCEXT, &val) != 0)
                 {
-                  error (EXIT_FAILURE, errno, _("%s: error setting %s"),
-                         quotef_n (0, device_name), quote_n (1, arg));
+                  die (EXIT_FAILURE, errno, _("%s: error setting %s"),
+                       quotef_n (0, device_name), quote_n (1, arg));
                 }
             }
 #endif
@@ -1388,7 +1387,7 @@ main (int argc, char **argv)
       static struct termios new_mode;
 
       if (tcsetattr (STDIN_FILENO, tcsetattr_options, &mode))
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
 
       /* POSIX (according to Zlotnick's book) tcsetattr returns zero if
          it performs *any* of the requested operations.  This means it
@@ -1398,7 +1397,7 @@ main (int argc, char **argv)
          compare them to the requested ones.  */
 
       if (tcgetattr (STDIN_FILENO, &new_mode))
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
 
       /* Normally, one shouldn't use memcmp to compare structures that
          may have 'holes' containing uninitialized data, but we have been
@@ -1423,9 +1422,9 @@ main (int argc, char **argv)
           if (speed_was_set || memcmp (&mode, &new_mode, sizeof (mode)) != 0)
 #endif
             {
-              error (EXIT_FAILURE, 0,
-                     _("%s: unable to perform all requested operations"),
-                     quotef (device_name));
+              die (EXIT_FAILURE, 0,
+                   _("%s: unable to perform all requested operations"),
+                   quotef (device_name));
 #ifdef TESTING
               {
                 size_t i;
@@ -1705,7 +1704,7 @@ set_window_size (int rows, int cols, char const *device_name)
   if (get_win_size (STDIN_FILENO, &win))
     {
       if (errno != EINVAL)
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
       memset (&win, 0, sizeof (win));
     }
 
@@ -1747,16 +1746,16 @@ set_window_size (int rows, int cols, char const *device_name)
       win.ws_col = 1;
 
       if (ioctl (STDIN_FILENO, TIOCSWINSZ, (char *) &win))
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
 
       if (ioctl (STDIN_FILENO, TIOCSSIZE, (char *) &ttysz))
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
       return;
     }
 # endif
 
   if (ioctl (STDIN_FILENO, TIOCSWINSZ, (char *) &win))
-    error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+    die (EXIT_FAILURE, errno, "%s", quotef (device_name));
 }
 
 static void
@@ -1767,11 +1766,11 @@ display_window_size (bool fancy, char const *device_name)
   if (get_win_size (STDIN_FILENO, &win))
     {
       if (errno != EINVAL)
-        error (EXIT_FAILURE, errno, "%s", quotef (device_name));
+        die (EXIT_FAILURE, errno, "%s", quotef (device_name));
       if (!fancy)
-        error (EXIT_FAILURE, 0,
-               _("%s: no size information for this device"),
-               quotef (device_name));
+        die (EXIT_FAILURE, 0,
+             _("%s: no size information for this device"),
+             quotef (device_name));
     }
   else
     {

@@ -312,6 +312,7 @@
 #include <getopt.h>
 #include <sys/types.h>
 #include "system.h"
+#include "die.h"
 #include "error.h"
 #include "fadvise.h"
 #include "hard-locale.h"
@@ -687,7 +688,7 @@ static bool use_col_separator = false;
 /* String used to separate columns if the -S option has been specified.
    Default without -S but together with one of the column options
    -a|COLUMN|-m is a 'space' and with the -J option a 'tab'. */
-static char *col_sep_string = (char *) "";
+static char const *col_sep_string = "";
 static int col_sep_length = 0;
 static char *column_separator = (char *) " ";
 static char *line_separator = (char *) "\t";
@@ -709,6 +710,9 @@ static char *custom_header;
 
 /* (-D) Date format for the header.  */
 static char const *date_format;
+
+/* The local time zone rules, as per the TZ environment variable.  */
+static timezone_t localtz;
 
 /* Date and file name for the header.  */
 static char *date_text;
@@ -766,6 +770,12 @@ static struct option const long_options[] =
   {GETOPT_VERSION_OPTION_DECL},
   {NULL, 0, NULL, 0}
 };
+
+static void
+integer_overflow (void)
+{
+  die (EXIT_FAILURE, 0, _("integer overflow"));
+}
 
 /* Return the number of columns that have either an open file or
    stored lines. */
@@ -836,15 +846,17 @@ parse_column_count (char const *s)
 static void
 separator_string (const char *optarg_S)
 {
-  col_sep_length = (int) strlen (optarg_S);
-  col_sep_string = xmalloc (col_sep_length + 1);
-  strcpy (col_sep_string, optarg_S);
+  size_t len = strlen (optarg_S);
+  if (INT_MAX < len)
+    integer_overflow ();
+  col_sep_length = len;
+  col_sep_string = optarg_S;
 }
 
 int
 main (int argc, char **argv)
 {
-  int n_files;
+  unsigned int n_files;
   bool old_options = false;
   bool old_w = false;
   bool old_s = false;
@@ -865,7 +877,7 @@ main (int argc, char **argv)
 
   n_files = 0;
   file_names = (argc > 1
-                ? xmalloc ((argc - 1) * sizeof (char *))
+                ? xnmalloc (argc - 1, sizeof (char *))
                 : NULL);
 
   while (true)
@@ -900,11 +912,11 @@ main (int argc, char **argv)
         case PAGES_OPTION:	/* --pages=FIRST_PAGE[:LAST_PAGE] */
           {			/* dominates old opt +... */
             if (! optarg)
-              error (EXIT_FAILURE, 0,
-                     _("'--pages=FIRST_PAGE[:LAST_PAGE]' missing argument"));
+              die (EXIT_FAILURE, 0,
+                   _("'--pages=FIRST_PAGE[:LAST_PAGE]' missing argument"));
             else if (! first_last_page (oi, 0, optarg))
-              error (EXIT_FAILURE, 0, _("invalid page range %s"),
-                     quote (optarg));
+              die (EXIT_FAILURE, 0, _("invalid page range %s"),
+                   quote (optarg));
             break;
           }
 
@@ -996,7 +1008,7 @@ main (int argc, char **argv)
         case 'S':
           old_s = false;
           /* Reset an additional input of -s, -S dominates -s */
-          col_sep_string = bad_cast ("");
+          col_sep_string = "";
           col_sep_length = 0;
           use_col_separator = true;
           if (optarg)
@@ -1049,16 +1061,18 @@ main (int argc, char **argv)
                    ? "%b %e %H:%M %Y"
                    : "%Y-%m-%d %H:%M");
 
+  localtz = tzalloc (getenv ("TZ"));
+
   /* Now we can set a reasonable initial value: */
   if (first_page_number == 0)
     first_page_number = 1;
 
   if (parallel_files && explicit_columns)
-    error (EXIT_FAILURE, 0,
+    die (EXIT_FAILURE, 0,
          _("cannot specify number of columns when printing in parallel"));
 
   if (parallel_files && print_across_flag)
-    error (EXIT_FAILURE, 0,
+    die (EXIT_FAILURE, 0,
        _("cannot specify both printing across and printing in parallel"));
 
 /* Translate some old short options to new/long options.
@@ -1132,7 +1146,7 @@ main (int argc, char **argv)
   IF_LINT (free (file_names));
 
   if (have_read_stdin && fclose (stdin) == EOF)
-    error (EXIT_FAILURE, errno, _("standard input"));
+    die (EXIT_FAILURE, errno, _("standard input"));
   return failed_opens ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
@@ -1219,7 +1233,7 @@ init_parameters (int number_of_files)
         }
       /* It's rather pointless to define a TAB separator with column
          alignment */
-      else if (!join_lines && *col_sep_string == '\t')
+      else if (!join_lines && col_sep_length == 1 && *col_sep_string == '\t')
         col_sep_string = column_separator;
 
       truncate_lines = true;
@@ -1256,11 +1270,16 @@ init_parameters (int number_of_files)
         chars_used_by_number = number_width;
     }
 
-  chars_per_column = (chars_per_line - chars_used_by_number
-                      - (columns - 1) * col_sep_length) / columns;
+  int sep_chars, useful_chars;
+  if (INT_MULTIPLY_WRAPV (columns - 1, col_sep_length, &sep_chars))
+    sep_chars = INT_MAX;
+  if (INT_SUBTRACT_WRAPV (chars_per_line - chars_used_by_number, sep_chars,
+                          &useful_chars))
+    useful_chars = 0;
+  chars_per_column = useful_chars / columns;
 
   if (chars_per_column < 1)
-    error (EXIT_FAILURE, 0, _("page width too narrow"));
+    die (EXIT_FAILURE, 0, _("page width too narrow"));
 
   if (numbered_lines)
     {
@@ -1488,9 +1507,9 @@ close_file (COLUMN *p)
   if (p->status == CLOSED)
     return;
   if (ferror (p->fp))
-    error (EXIT_FAILURE, errno, "%s", quotef (p->name));
+    die (EXIT_FAILURE, errno, "%s", quotef (p->name));
   if (fileno (p->fp) != STDIN_FILENO && fclose (p->fp) != 0)
-    error (EXIT_FAILURE, errno, "%s", quotef (p->name));
+    die (EXIT_FAILURE, errno, "%s", quotef (p->name));
 
   if (!parallel_files)
     {
@@ -1611,7 +1630,7 @@ init_header (char const *filename, int desc)
   struct stat st;
   struct timespec t;
   int ns;
-  struct tm *tm;
+  struct tm tm;
 
   /* If parallel files or standard input, use current date. */
   if (STREQ (filename, "-"))
@@ -1627,18 +1646,18 @@ init_header (char const *filename, int desc)
     }
 
   ns = t.tv_nsec;
-  tm = localtime (&t.tv_sec);
-  if (tm == NULL)
+  if (localtime_rz (localtz, &t.tv_sec, &tm))
     {
-      buf = xmalloc (INT_BUFSIZE_BOUND (long int)
-                     + MAX (10, INT_BUFSIZE_BOUND (int)));
-      sprintf (buf, "%ld.%09d", (long int) t.tv_sec, ns);
+      size_t bufsize
+        = nstrftime (NULL, SIZE_MAX, date_format, &tm, localtz, ns) + 1;
+      buf = xmalloc (bufsize);
+      nstrftime (buf, bufsize, date_format, &tm, localtz, ns);
     }
   else
     {
-      size_t bufsize = nstrftime (NULL, SIZE_MAX, date_format, tm, 0, ns) + 1;
-      buf = xmalloc (bufsize);
-      nstrftime (buf, bufsize, date_format, tm, 0, ns);
+      char secbuf[INT_BUFSIZE_BOUND (intmax_t)];
+      buf = xmalloc (sizeof secbuf + MAX (10, INT_BUFSIZE_BOUND (int)));
+      sprintf (buf, "%s.%09d", timetostr (t.tv_sec, secbuf), ns);
     }
 
   free (date_text);
@@ -1708,7 +1727,7 @@ static void
 align_column (COLUMN *p)
 {
   padding_not_printed = p->start_position;
-  if (padding_not_printed - col_sep_length > 0)
+  if (col_sep_length < padding_not_printed)
     {
       pad_across_to (padding_not_printed - col_sep_length);
       padding_not_printed = ANYWHERE;
@@ -1871,21 +1890,25 @@ print_page (void)
 static void
 init_store_cols (void)
 {
-  int total_lines = lines_per_body * columns;
-  int chars_if_truncate = total_lines * (chars_per_column + 1);
+  int total_lines, total_lines_1, chars_per_column_1, chars_if_truncate;
+  if (INT_MULTIPLY_WRAPV (lines_per_body, columns, &total_lines)
+      || INT_ADD_WRAPV (total_lines, 1, &total_lines_1)
+      || INT_ADD_WRAPV (chars_per_column, 1, &chars_per_column_1)
+      || INT_MULTIPLY_WRAPV (total_lines, chars_per_column_1,
+                             &chars_if_truncate))
+    integer_overflow ();
 
   free (line_vector);
   /* FIXME: here's where it was allocated.  */
-  line_vector = xmalloc ((total_lines + 1) * sizeof *line_vector);
+  line_vector = xnmalloc (total_lines_1, sizeof *line_vector);
 
   free (end_vector);
-  end_vector = xmalloc (total_lines * sizeof *end_vector);
+  end_vector = xnmalloc (total_lines, sizeof *end_vector);
 
   free (buff);
-  buff_allocated = (use_col_separator
-                    ? 2 * chars_if_truncate
-                    : chars_if_truncate);	/* Tune this. */
-  buff = xmalloc (buff_allocated);
+  buff = xnmalloc (chars_if_truncate, use_col_separator + 1);
+  buff_allocated = chars_if_truncate;  /* Tune this. */
+  buff_allocated *= use_col_separator + 1;
 }
 
 /* Store all but the rightmost column.
@@ -2198,10 +2221,8 @@ print_white_space (void)
 static void
 print_sep_string (void)
 {
-  char *s;
+  char const *s = col_sep_string;
   int l = col_sep_length;
-
-  s = col_sep_string;
 
   if (separators_not_printed <= 0)
     {
@@ -2347,7 +2368,7 @@ print_header (void)
   print_white_space ();
 
   if (page_number == 0)
-    error (EXIT_FAILURE, 0, _("page number overflow"));
+    die (EXIT_FAILURE, 0, _("page number overflow"));
 
   /* The translator must ensure that formatting the translation of
      "Page %"PRIuMAX does not generate more than (sizeof page_text - 1)
@@ -2462,7 +2483,7 @@ read_line (COLUMN *p)
           align_empty_cols = false;
         }
 
-      if (padding_not_printed - col_sep_length > 0)
+      if (col_sep_length < padding_not_printed)
         {
           pad_across_to (padding_not_printed - col_sep_length);
           padding_not_printed = ANYWHERE;
@@ -2565,7 +2586,7 @@ print_stored (COLUMN *p)
         }
     }
 
-  if (padding_not_printed - col_sep_length > 0)
+  if (col_sep_length < padding_not_printed)
     {
       pad_across_to (padding_not_printed - col_sep_length);
       padding_not_printed = ANYWHERE;
