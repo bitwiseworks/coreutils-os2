@@ -4777,8 +4777,15 @@ main (int argc, char **argv)
     free (files);
 #endif
 
+#if defined(__OS2__) && defined(HAVE_OPENSSL_MD5)
+  /* Somehow OpenSSL screws stdin if it's a socket (see #145 for details).
+     Ignore the fclose error for now.  */
+  if (have_read_stdin)
+    fclose (stdin);
+#else
   if (have_read_stdin && fclose (stdin) == EOF)
     sort_die (_("close failed"), "-");
+#endif
 
   return EXIT_SUCCESS;
 }
