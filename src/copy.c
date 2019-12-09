@@ -97,6 +97,7 @@
 #define INCL_DOS
 #define INCL_DOSERRORS
 #include <os2.h>
+#include <InnoTekLIBC/errno.h>
 #endif
 
 #ifndef HAVE_MKFIFO
@@ -1844,6 +1845,8 @@ int unlockEX(const char *dst_name)
 
   // unlock file
   rc = DosReplaceModule((PCSZ)dstName, NULL, NULL);
+  if (rc)
+    __libc_native2errno(rc);
   return rc;
 }
 #endif
