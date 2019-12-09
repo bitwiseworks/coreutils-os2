@@ -93,6 +93,12 @@
 # define lchown(name, uid, gid) chown (name, uid, gid)
 #endif
 
+#ifdef __OS2__
+#define INCL_DOS
+#define INCL_DOSERRORS
+#include <os2.h>
+#endif
+
 #ifndef HAVE_MKFIFO
 static int
 rpl_mkfifo (char const *file, mode_t mode)
@@ -1821,6 +1827,27 @@ should_dereference (const struct cp_options *x, bool command_line_arg)
              && command_line_arg);
 }
 
+#ifdef __OS2__
+/* try to unlock the file */
+int unlockEX(const char *dst_name)
+{
+  APIRET rc;
+  char dstName[_MAX_PATH];
+
+  // get native path
+  if (_realrealpath(dst_name, dstName, sizeof(dstName)) == NULL)
+    {
+      // failed for some reasons;
+      errno = EACCES;
+      return -1;
+    }
+
+  // unlock file
+  rc = DosReplaceModule((PCSZ)dstName, NULL, NULL);
+  return rc;
+}
+#endif
+
 /* Copy the file SRC_NAME to the file DST_NAME.  The files may be of
    any type.  NEW_DST should be true if the file DST_NAME cannot
    exist because its parent directory was just created; NEW_DST should
@@ -2157,7 +2184,17 @@ copy_internal (char const *src_name, char const *dst_name,
                            && ! S_ISREG (src_sb.st_mode))
                        ))
             {
+#ifdef __OS2__
+              int rc = unlink (dst_name);
+              if (rc != 0 && errno == EACCES)
+                {
+                  if (rc = unlockEX(dst_name) == 0);
+                    rc = unlink(dst_name);
+                }
+              if (rc != 0 && errno != ENOENT)
+#else
               if (unlink (dst_name) != 0 && errno != ENOENT)
+#endif
                 {
                   error (0, errno, _("cannot remove %s"), quoteaf (dst_name));
                   return false;
