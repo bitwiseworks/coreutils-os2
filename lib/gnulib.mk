@@ -504,7 +504,7 @@ EXTRA_DIST += lib/backup-internal.h lib/backupfile.h
 
 ## begin gnulib module backupfile
 
-lib_libcoreutils_a_SOURCES += lib/backupfile.c lib/backup-find.c
+lib_libcoreutils_a_SOURCES += lib/backup-find.c
 
 EXTRA_DIST += lib/backup-internal.h lib/backupfile.h
 
