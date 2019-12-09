@@ -18,6 +18,7 @@ build-aux/texinfo.tex
 build-aux/ylwrap
 configure
 lib/config.hin
+lib/config.hin~
 m4/extern-inline.m4
 m4/glibc2.m4
 m4/intdiv0.m4
@@ -28,3 +29,5 @@ m4/printf-posix.m4
 m4/uintmax_t.m4
 m4/visibility.m4
 po/Makevars.template
+gnulib-tests/Makefile.in
+po/Makefile.in.in
