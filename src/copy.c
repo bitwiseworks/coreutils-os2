@@ -1846,7 +1846,7 @@ int unlockEX(const char *dst_name)
   // unlock file
   rc = DosReplaceModule((PCSZ)dstName, NULL, NULL);
   if (rc)
-    __libc_native2errno(rc);
+    errno = __libc_native2errno(rc);
   return rc;
 }
 #endif
