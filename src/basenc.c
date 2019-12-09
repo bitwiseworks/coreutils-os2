@@ -21,6 +21,9 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <sys/types.h>
+#ifdef __OS2__
+#include <io.h>
+#endif
 
 #include "system.h"
 #include "c-ctype.h"
@@ -1249,6 +1252,10 @@ main (int argc, char **argv)
     }
 
   fadvise (input_fh, FADVISE_SEQUENTIAL);
+
+#ifdef __OS2__
+  setmode(fileno(stdout), O_BINARY);
+#endif
 
   if (decode)
     do_decode (input_fh, stdout, ignore_garbage);
